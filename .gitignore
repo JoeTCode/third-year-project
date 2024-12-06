@@ -1,0 +1,13 @@
+# ignore the .idea folder
+.idea/
+
+
+node_modules/
+
+# ignore Python cache files
+__pycache__/
+*.pyc
+
+.env
+
+.DS_Store

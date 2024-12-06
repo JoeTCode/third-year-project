@@ -1,0 +1,7 @@
+path: /Users/joe/fiftyone/open-images-v7
+train: train/images
+val: train/images
+
+nc: 1
+names:
+  0: licence_plate
