@@ -1,7 +1,0 @@
-path: /gpfs/home/hyg22ktu/train-yolo
-train: train/images
-val: validation/images
-
-nc: 1
-names:
-  0: license_plate
