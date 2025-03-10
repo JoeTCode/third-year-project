@@ -14,7 +14,7 @@ from config import MAX_ANNOTATIONS
 train_root = "/Users/joe/Desktop/eu-dataset/train/images"
 train_annotations_file = "eu-train-dataset-coco.json"
 
-class Resize():
+class Resize:
     def __init__(self, size):
         assert isinstance(size, tuple) and len(size) == 2, "Size must be a tuple (height, width)"
         self.size = size
@@ -44,7 +44,7 @@ class Resize():
 
         return {"image": resized_image, "annotations": annotations}
 
-class ToTensor():
+class ToTensor:
     """ Converts PIL image into tensor. """
     def __call__(self, sample):
         image, annotations = sample['image'], sample['annotations']
@@ -136,21 +136,35 @@ def show_bbox(sample, transform=None):
     # Show image
     image.show()
 
-for i, sample in enumerate(anpr_coco_dataset):
-    image, annotations = sample['image'], sample['annotations']
+def test_sample_dataset(dataset):
+    for i, sample in enumerate(dataset):
+        image, annotations = sample['image'], sample['annotations']
 
-    if isinstance(image, Image.Image):
-        print(i, sample['image'].size, len(annotations))
-        with open(train_annotations_file, "r") as f:
-            data = json.load(f)
-        show_bbox(sample)
+        if isinstance(image, Image.Image): # If image is type PIL (the images were not transformed)
+            print(f"{i} - {sample['image'].size()}, {len(annotations)}, {annotations}")
+            show_bbox(sample)
 
-    else:
-        print(i, sample['image'].size(), len(annotations))
-        with open(train_annotations_file, "r") as f:
-            data = json.load(f)
-        show_bbox(sample, transform=transform)
+        else: # Images were transformed
+            print(f"{i} - {sample['image'].size()}, {len(annotations)} ({annotations})")
+            show_bbox(sample, transform=transform)
 
-    if i == 3:
-        break
+        if i == 3:
+            break
 
+#test_sample_dataset(anpr_coco_dataset)
+
+def annotations_to_tensor(annotations, bbox_length):
+    annotations_list = []
+    for annotation in annotations:
+        if annotation == 0:
+            annotations_list.append([0]*bbox_length)
+        else:
+            annotations_list.append(list(annotation.values())[3])
+
+    annotations_numpy_list = np.array(annotations_list)
+    to_tensor = transforms.ToTensor()
+    return to_tensor(annotations_numpy_list)
+
+
+test = [{'id': 0, 'category_id': 0, 'image_id': 0, 'bbox': [127.734375, 172.03124999999997, 19.21875, 10.3125]}, 0, 0, 0, 0]
+print(annotations_to_tensor(test, 4))

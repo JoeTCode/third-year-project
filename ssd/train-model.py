@@ -7,6 +7,7 @@ import torch.optim as optim
 import torchvision
 from torchvision import transforms
 from torchvision.datasets import CocoDetection
+from custom_dataset import AnprCocoDataset
 from torch.utils.data import DataLoader
 from torchvision.models.detection.ssd import SSD300_VGG16_Weights
 from torch.nn import CrossEntropyLoss
