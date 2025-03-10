@@ -9,7 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
-from config import MAX_ANNOTATIONS
+from config import MAX_ANNOTATIONS, BBOX_LENGTH
 
 train_root = "/Users/joe/Desktop/eu-dataset/train/images"
 train_annotations_file = "eu-train-dataset-coco.json"
@@ -44,13 +44,33 @@ class Resize:
 
         return {"image": resized_image, "annotations": annotations}
 
+def annotations_to_tensor(annotations, bbox_length=BBOX_LENGTH):
+    annotations_list = []
+    for annotation in annotations:
+        if annotation == 0:
+            annotations_list.append([0]*(bbox_length + 3)) # extra 3 padding represents id, category_id, image_id
+        else:
+            bbox = list(annotation.values())[3]
+            identifiers = list(annotation.values())[:3] # id, category_id, image_id
+            identifiers.extend(bbox)
+            annotations_list.append(identifiers)
+
+    annotations_numpy_list = np.array(annotations_list)
+    to_tensor = transforms.ToTensor()
+    return to_tensor(annotations_numpy_list)
+
+def is_padding(subarray):
+    return all(value == 0 for value in subarray)
+
 class ToTensor:
     """ Converts PIL image into tensor. """
     def __call__(self, sample):
         image, annotations = sample['image'], sample['annotations']
         to_tensor = transforms.ToTensor()
         image_tensor = to_tensor(image)
-        return {'image': image_tensor, 'annotations': annotations}
+        annotations_tensor = annotations_to_tensor(annotations)
+
+        return {'image': image_tensor, 'annotations': annotations_tensor}
 
 
 # perform some transformations like resizing,
@@ -110,6 +130,17 @@ anpr_coco_dataset = AnprCocoDataset(
     transform=transform
 )
 
+def convert_annotations_tensor(annotations_tensor, max_annotations=MAX_ANNOTATIONS):
+    annotations_list = annotations_tensor.tolist()[0]
+    anno_list = []
+    for annotation in annotations_list:
+        if not is_padding(annotation):
+            anno_dict = {"id": int(annotation[0]), "category_id": int(annotation[1]), "image_id": int(annotation[2]),
+                         "bbox": annotation[3:]}
+            anno_list.append(anno_dict)
+    length = len(anno_list)
+    anno_list.extend([0]*(max_annotations - length))
+    return anno_list
 
 def show_bbox(sample, transform=None):
     """
@@ -118,7 +149,8 @@ def show_bbox(sample, transform=None):
     :return: Image with bounding boxes.
     """
 
-    image, annotations = sample['image'], sample['annotations'] # transform image and transform annotations
+    image, annotations = sample['image'], convert_annotations_tensor(sample['annotations']) # transform image and transform annotations
+
     if transform:
         image = transforms.ToPILImage()(image)  # Convert back to PIL for visualization
 
@@ -138,33 +170,25 @@ def show_bbox(sample, transform=None):
 
 def test_sample_dataset(dataset):
     for i, sample in enumerate(dataset):
-        image, annotations = sample['image'], sample['annotations']
+        image, annotations = sample['image'], convert_annotations_tensor(sample['annotations'])
 
         if isinstance(image, Image.Image): # If image is type PIL (the images were not transformed)
-            print(f"{i} - {sample['image'].size()}, {len(annotations)}, {annotations}")
+            print(f"{i}: {sample['image'].size()} -- {len(annotations)}, {annotations}")
             show_bbox(sample)
 
         else: # Images were transformed
-            print(f"{i} - {sample['image'].size()}, {len(annotations)} ({annotations})")
+            print(f"{i}: {sample['image'].size()} -- {len(annotations)}, {annotations}")
             show_bbox(sample, transform=transform)
 
         if i == 3:
             break
 
-#test_sample_dataset(anpr_coco_dataset)
+test_sample_dataset(anpr_coco_dataset)
 
-def annotations_to_tensor(annotations, bbox_length):
-    annotations_list = []
-    for annotation in annotations:
-        if annotation == 0:
-            annotations_list.append([0]*bbox_length)
-        else:
-            annotations_list.append(list(annotation.values())[3])
-
-    annotations_numpy_list = np.array(annotations_list)
-    to_tensor = transforms.ToTensor()
-    return to_tensor(annotations_numpy_list)
+test = [{'id': 0, 'category_id': 0, 'image_id': 0, 'bbox': [127.734375, 172.03124999999997, 19.21875, 10.3125]},
+        {'id': 0, 'category_id': 0, 'image_id': 0, 'bbox': [127.734375, 172.03124999999997, 19.21875, 10.3125]}, 0, 0, 0]
 
 
-test = [{'id': 0, 'category_id': 0, 'image_id': 0, 'bbox': [127.734375, 172.03124999999997, 19.21875, 10.3125]}, 0, 0, 0, 0]
-print(annotations_to_tensor(test, 4))
+# tensor = annotations_to_tensor(test)
+# annotation = convert_annotations_tensor(tensor)
+# print(annotation)

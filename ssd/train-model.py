@@ -7,30 +7,30 @@ import torch.optim as optim
 import torchvision
 from torchvision import transforms
 from torchvision.datasets import CocoDetection
-from custom_dataset import AnprCocoDataset
+from custom_dataset import AnprCocoDataset, Resize, ToTensor
 from torch.utils.data import DataLoader
 from torchvision.models.detection.ssd import SSD300_VGG16_Weights
 from torch.nn import CrossEntropyLoss
 from torch.nn import MSELoss
+from config import EPOCHS
 
 train_root = "/Users/joe/Desktop/eu-dataset/train/images"
 train_annotations_file = "eu-train-dataset-coco.json"
-EPOCHS = 10
 # train on the GPU or on the CPU, if a GPU is not available
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-# perform some transformations like resizing,
-# centering and tensor conversion
-# using transforms function
-transform = transforms.Compose([
-        transforms.Resize((300, 300)),
-	    transforms.ToTensor()
-     ])
+
 
 # Load the COCO dataset
 # dataset = CocoDetection(root=train_root,
 #                         annFile=train_annotations_file,
 #                         transform=transform)
+
+dataset = AnprCocoDataset(
+    train_annotations_file_path=train_annotations_file,
+    train_images_root=train_root,
+    transform=transform
+)
 
 # def collate_fn(batch):
 #
