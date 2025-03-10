@@ -153,7 +153,7 @@ def test_sample_dataset(dataset):
 
 #test_sample_dataset(anpr_coco_dataset)
 
-def annotations_to_tensor(annotations, bbox_length):
+def annotations_to_bbox_tensor(annotations, bbox_length):
     annotations_list = []
     for annotation in annotations:
         if annotation == 0:
@@ -167,4 +167,4 @@ def annotations_to_tensor(annotations, bbox_length):
 
 
 test = [{'id': 0, 'category_id': 0, 'image_id': 0, 'bbox': [127.734375, 172.03124999999997, 19.21875, 10.3125]}, 0, 0, 0, 0]
-print(annotations_to_tensor(test, 4))
+print(annotations_to_bbox_tensor(test, 4))
