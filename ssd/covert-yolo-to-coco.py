@@ -3,6 +3,7 @@
 from PIL import Image
 import os
 import json
+from config import MAX_ANNOTATIONS
 
 def preprocess_dataset(images_path, labels_path):
     # creates list of image names without file extension
@@ -29,8 +30,8 @@ def convert_to_coco(images_path, labels_path, output_json_path):
         {"id": 2949, "width": 640, "height": 480, "file_name": "nnnnnnnnnn.jpg", "date_captured": "2013-11-18 02:53:27"}
     ],
     """
-    image_id = 1
-    annotation_id = 1
+    image_id = 0
+    annotation_id = 0
     date = "2025-03-03 02:41:42"
 
     downloaded_images = preprocess_dataset(images_path, labels_path)
@@ -53,8 +54,11 @@ def convert_to_coco(images_path, labels_path, output_json_path):
         """
 
         path = os.path.join(labels_path, image_name)
+        annotation_for_image_count = 0
         with open(f"{path}.txt", "r") as f:
             for line in f:
+                if annotation_for_image_count == MAX_ANNOTATIONS:
+                    break
                 class_id, x_center, y_center, bbox_width, bbox_height = line.split(" ")
 
                 # Convert String to float
@@ -66,12 +70,12 @@ def convert_to_coco(images_path, labels_path, output_json_path):
                 # Convert YOLO format to COCO format
                 xmin = (x_center - bbox_width / 2) * width
                 ymin = (y_center - bbox_height / 2) * height
-                xmax = (x_center + bbox_width / 2) * width
-                ymax = (y_center + bbox_height / 2) * height
+                bbox_width = bbox_width * width
+                bbox_height = bbox_height * height
 
-                annotations.append({"id": annotation_id, "category_id": categories[0]["id"], "image_id": image_id, "bbox": [xmin, ymin, xmax, ymax]})
+                annotations.append({"id": annotation_id, "category_id": categories[0]["id"], "image_id": image_id, "bbox": [xmin, ymin, bbox_width, bbox_height]})
                 annotation_id += 1
-                # break
+                annotation_for_image_count += 1
 
         image_id += 1
 
