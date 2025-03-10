@@ -26,6 +26,14 @@ device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cp
 #                         annFile=train_annotations_file,
 #                         transform=transform)
 
+# perform some transformations like resizing,
+# centering and tensor conversion
+# using transforms function
+transform = transforms.Compose([
+        Resize((300, 300)),
+	    ToTensor()
+     ])
+
 dataset = AnprCocoDataset(
     train_annotations_file_path=train_annotations_file,
     train_images_root=train_root,
@@ -49,7 +57,7 @@ dataset = AnprCocoDataset(
 # dataset in the specified transformation.
 # dataloader = torch.utils.data.DataLoader(dataset, batch_size=4)
 
-train_dataloader = DataLoader(dataset, batch_size=32, shuffle=True, collate_fn=collate_fn)
+train_dataloader = DataLoader(dataset, batch_size=32, shuffle=True, num_workers=0)
 
 # Load the model with pretrained weights
 model = torchvision.models.detection.ssd300_vgg16(weights=SSD300_VGG16_Weights.DEFAULT)

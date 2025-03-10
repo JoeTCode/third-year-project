@@ -97,17 +97,19 @@ class AnprCocoDataset(Dataset):
         with open(self.train_annotations_file_path, "r") as f:
             data = json.load(f)
         self.train_annotations = data["annotations"]
-        self.all_annotations = data["images"] # list of dicts
+        self.image_annotations = data["images"] # list of dicts
 
     def __len__(self):
-        return len(self.train_annotations)
+        return len(self.image_annotations)
 
     def __getitem__(self, idx):
 
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        image_name = self.all_annotations[idx]["file_name"]
+        #print(idx)
+
+        image_name = self.image_annotations[idx]["file_name"]
         image_path = os.path.join(self.train_images_root, image_name)
         image = Image.open(image_path)
 
@@ -123,12 +125,6 @@ class AnprCocoDataset(Dataset):
             sample = self.transform(sample) # transformed sample
 
         return sample
-
-anpr_coco_dataset = AnprCocoDataset(
-    train_annotations_file_path=train_annotations_file,
-    train_images_root=train_root,
-    transform=transform
-)
 
 def convert_annotations_tensor(annotations_tensor, max_annotations=MAX_ANNOTATIONS):
     annotations_list = annotations_tensor.tolist()[0]
@@ -183,12 +179,16 @@ def test_sample_dataset(dataset):
         if i == 3:
             break
 
-test_sample_dataset(anpr_coco_dataset)
+if __name__ == '__main__':
+    anpr_coco_dataset = AnprCocoDataset(
+        train_annotations_file_path=train_annotations_file,
+        train_images_root=train_root,
+        transform=transform
+    )
+    test_sample_dataset(anpr_coco_dataset)
 
-test = [{'id': 0, 'category_id': 0, 'image_id': 0, 'bbox': [127.734375, 172.03124999999997, 19.21875, 10.3125]},
-        {'id': 0, 'category_id': 0, 'image_id': 0, 'bbox': [127.734375, 172.03124999999997, 19.21875, 10.3125]}, 0, 0, 0]
-
-
-# tensor = annotations_to_tensor(test)
-# annotation = convert_annotations_tensor(tensor)
-# print(annotation)
+    # test = [{'id': 0, 'category_id': 0, 'image_id': 0, 'bbox': [127.734375, 172.03124999999997, 19.21875, 10.3125]},
+    #         {'id': 0, 'category_id': 0, 'image_id': 0, 'bbox': [127.734375, 172.03124999999997, 19.21875, 10.3125]}, 0, 0, 0]
+    # tensor = annotations_to_tensor(test)
+    # annotation = convert_annotations_tensor(tensor)
+    # print(annotation)
