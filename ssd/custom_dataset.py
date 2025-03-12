@@ -144,7 +144,6 @@ def show_bbox(sample, transform=None):
     :param sample: List of dicts, containing annotations w.r.t. to the image.
     :return: Image with bounding boxes.
     """
-
     image, annotations = sample['image'], convert_annotations_tensor(sample['annotations']) # transform image and transform annotations
 
     if transform:

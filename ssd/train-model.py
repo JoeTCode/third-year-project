@@ -1,6 +1,7 @@
 # credit to https://www.geeksforgeeks.org/loading-data-in-pytorch/
 # credit to https://pytorch.org/tutorials/intermediate/torchvision_tutorial.html
 # credit to https://medium.com/@piyushkashyap045/transfer-learning-in-pytorch-fine-tuning-pretrained-models-for-custom-datasets-6737b03d6fa2#:~:text=limited%20hardware%20resources.-,Loading%20Pre%2DTrained%20Models%20in%20PyTorch,models%20module.
+# credit to https://pytorch.org/tutorials/beginner/data_loading_tutorial.html
 
 import torch
 import torch.optim as optim
@@ -79,8 +80,14 @@ for epoch in range(1):
     train_loss = 0
     # Initialise correct predictions
     train_correct = 0
-    for images, targets in train_dataloader:
-        images, targets = images.to(device), targets.to(device)
+    for i_batch, sample_batched in enumerate(train_dataloader):
+        images = sample_batched['image']
+        annotations = sample_batched['annotations']
+
+        print(i_batch, images.size(), annotations.size())
+
+        images, targets = images.to(device), annotations.to(device)
+
         optimizer.zero_grad()
         outputs = model(images)
         print(outputs)
