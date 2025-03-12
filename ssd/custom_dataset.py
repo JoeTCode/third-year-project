@@ -15,13 +15,27 @@ train_root = "/Users/joe/Desktop/eu-dataset/train/images"
 train_annotations_file = "eu-train-dataset-coco.json"
 
 class Resize:
+    """
+    Resizes an image to the desired dimensions
+    """
     def __init__(self, size):
+        """
+        :param size: The dimensions to resize the image to.
+        """
         assert isinstance(size, tuple) and len(size) == 2, "Size must be a tuple (height, width)"
         self.size = size
     def __call__(self, sample):
-        image, annotations = sample['image'], sample['annotations']
+        """
 
-        h, w = image.size
+        :param sample: A dictionary containing the image, and the annotations. Annotations is a dictionary containing
+            image_id, boxes, labels.
+        :return: A dictionary with resized image and annotation boxes.
+        """
+
+        image, annotations = sample["image"], sample["annotations"]
+        bboxes = annotations['boxes']
+
+        h, w = image.size # Original image size
         scale_x = self.size[1] / w
         scale_y = self.size[0] / h
 
@@ -32,23 +46,19 @@ class Resize:
         resize_image = transforms.Resize(self.size)
         resized_image = resize_image(image)
 
-        for annotation in annotations:
-            if annotation != 0:
-                bbox = annotation['bbox']
-                x_min, y_min, width, height = bbox
-                new_x_min = x_min * scale_x
-                new_y_min = y_min * scale_y
-                new_width = width * scale_x
-                new_height = height * scale_y
-                annotation['bbox'] = [new_x_min, new_y_min, new_width, new_height]
+        # Update annotations to reflect the resized image
+        bboxes[:, [0, 2]] *= scale_x # Scale x_min and x_max
+        bboxes[:, [1, 3]] *= scale_y # Scale y_min and y_max
 
-        return {"image": resized_image, "annotations": annotations}
+        sample = {"image": resized_image, "annotations": annotations,}
+        return sample
 
 def annotations_to_tensor(annotations, bbox_length=BBOX_LENGTH):
     annotations_list = []
     for annotation in annotations:
         if annotation == 0:
-            annotations_list.append([0]*(bbox_length + 3)) # extra 3 padding represents id, category_id, image_id
+            continue
+            #annotations_list.append([0]*(bbox_length + 3)) # extra 3 padding represents id, category_id, image_id
         else:
             bbox = list(annotation.values())[3]
             identifiers = list(annotation.values())[:3] # id, category_id, image_id
@@ -65,12 +75,17 @@ def is_padding(subarray):
 class ToTensor:
     """ Converts PIL image into tensor. """
     def __call__(self, sample):
-        image, annotations = sample['image'], sample['annotations']
+        """
+        :param sample: A dictionary containing image, and annotations.
+        :return: (Tuple), The image in tensor form and the annotations.
+        """
+
+        image, annotations = sample["image"], sample["annotations"]
         to_tensor = transforms.ToTensor()
         image_tensor = to_tensor(image)
-        annotations_tensor = annotations_to_tensor(annotations)
+        #annotations_tensor = annotations_to_tensor(annotations)
 
-        return {'image': image_tensor, 'annotations': annotations_tensor}
+        return image_tensor, annotations
 
 
 # perform some transformations like resizing,
@@ -81,6 +96,16 @@ transform = transforms.Compose([
         Resize((300, 300)),
 	    ToTensor()
      ])
+
+def reformat_bbox(bbox):
+    """
+    Converts COCO bounding box: [x_min, y_min, width, height] to pytorch bounding box: [x_min, y_min, x_max, y_max].
+    :param bbox: (List), [x_min, y_min, width, height].
+    :return: (List), [x_min, y_min, x_max, y_max].
+    """
+    x_min, y_min, width, height = bbox
+    x_max, y_max = x_min + width, y_min + height
+    return [x_min, y_min, x_max, y_max]
 
 class AnprCocoDataset(Dataset):
     def __init__(self, train_annotations_file_path, train_images_root, transform=None):
@@ -103,7 +128,11 @@ class AnprCocoDataset(Dataset):
         return len(self.image_annotations)
 
     def __getitem__(self, idx):
+        """
 
+        :param idx: (Int) Idx is equal to the image_id.
+        :return: (Tuple), image and annotations. Annotations is a dictionary containing image_id, boxes, and labels.
+        """
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
@@ -114,17 +143,28 @@ class AnprCocoDataset(Dataset):
         image = Image.open(image_path)
 
         all_annotations = self.train_annotations
-        annotations = [annotation for annotation in all_annotations if annotation["image_id"] == idx]
-        padding = [0] * (MAX_ANNOTATIONS - len(annotations))
-        annotations.extend(padding)
+        # Converts bbox (from COCO) for image, and stores it in the form [x_min, y_min, x_max, y_max]
+        bboxes = [reformat_bbox(annotation['bbox']) for annotation in all_annotations if annotation["image_id"] == idx]
+        labels = [annotation['category_id'] for annotation in all_annotations if annotation["image_id"] == idx]
 
-        sample = {'image': image, 'annotations': annotations}
+        annotations = {
+            # Needs to be dtype int64 otherwise model throws error
+            "image_id": torch.tensor(idx, dtype=torch.int64),
+            "boxes": torch.tensor(bboxes, dtype=torch.float),
+            "labels": torch.tensor(labels, dtype=torch.int64) # category id
+        }
 
-        # If necessary, perform transforms (e.g., resize, normalize)
+        # padding = [0] * (MAX_ANNOTATIONS - len(annotations))
+        # annotations.extend(padding)
+
+        #sample = {'image': image, 'annotations': annotations}
+
+        # If necessary, perform transforms (e.g., resize, normalize) using custom transform
+        sample = {"image": image, "annotations": annotations} # Combine, as compose only accepts 1 argument
         if self.transform:
-            sample = self.transform(sample) # transformed sample
+            image, annotations = self.transform(sample) # Transformed sample
 
-        return sample
+        return image, annotations
 
 def convert_annotations_tensor(annotations_tensor, max_annotations=MAX_ANNOTATIONS):
     annotations_list = annotations_tensor.tolist()[0]
@@ -135,45 +175,45 @@ def convert_annotations_tensor(annotations_tensor, max_annotations=MAX_ANNOTATIO
                          "bbox": annotation[3:]}
             anno_list.append(anno_dict)
     length = len(anno_list)
-    anno_list.extend([0]*(max_annotations - length))
+    # anno_list.extend([0]*(max_annotations - length))
     return anno_list
 
-def show_bbox(sample, transform=None):
+# TEST CODE
+
+def show_bbox(image, annotations, transform=None):
     """
     Draws bounding boxes on an image using PIL.
-    :param sample: List of dicts, containing annotations w.r.t. to the image.
-    :return: Image with bounding boxes.
+    :param image: The image, either in PIL or tensor form.
+    :param annotations: (dict), Containing image_id, boxes, labels.
+    :param transform: Indicates if a transform was applied to a sample.
+    :return: Displays the image with bounding boxes overlay.
     """
-    image, annotations = sample['image'], convert_annotations_tensor(sample['annotations']) # transform image and transform annotations
+    # print('SHOW_BBOX:' ,image, annotations) # print as tensor
 
     if transform:
         image = transforms.ToPILImage()(image)  # Convert back to PIL for visualization
 
     draw = ImageDraw.Draw(image)
     # Draw each bbox
-    for annotation in annotations:
-        if annotation != 0: # Check it is not padding
-            bbox = annotation["bbox"]
-            x_min, y_min, width, height = bbox
-            # Reformatting the COCO bbox values to visualise a rectangular bbox on the image
-            x_max = x_min + width
-            y_max = y_min + height
-            draw.rectangle([x_min, y_min, x_max, y_max], outline="red", width=3)
+    bboxes = annotations['boxes']
+    for i in range(bboxes.shape[0]):
+        x_min, y_min, x_max, y_max = bboxes[i]
+        draw.rectangle([x_min, y_min, x_max, y_max], outline="red", width=3)
 
     # Show image
     image.show()
 
 def test_sample_dataset(dataset):
     for i, sample in enumerate(dataset):
-        image, annotations = sample['image'], convert_annotations_tensor(sample['annotations'])
+        image, annotations = sample[0], sample[1]
 
         if isinstance(image, Image.Image): # If image is type PIL (the images were not transformed)
-            print(f"{i}: {sample['image'].size()} -- {len(annotations)}, {annotations}")
-            show_bbox(sample)
+            print(f"{i}: {image.size} -- {len(annotations)}, {annotations}")
+            show_bbox(image, annotations)
 
         else: # Images were transformed
-            print(f"{i}: {sample['image'].size()} -- {len(annotations)}, {annotations}")
-            show_bbox(sample, transform=transform)
+            print(f"{i}: {image.size()} -- {len(annotations)}, {annotations}")
+            show_bbox(image, annotations, transform=transform)
 
         if i == 3:
             break

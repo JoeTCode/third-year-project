@@ -73,7 +73,7 @@ def convert_to_coco(images_path, labels_path, output_json_path):
                 bbox_width = bbox_width * width
                 bbox_height = bbox_height * height
 
-                annotations.append({"id": annotation_id, "category_id": categories[0]["id"], "image_id": image_id, "bbox": [xmin, ymin, bbox_width, bbox_height]})
+                annotations.append({"id": annotation_id, "category_id": categories[0]["id"]+1, "image_id": image_id, "bbox": [xmin, ymin, bbox_width, bbox_height]})
                 annotation_id += 1
                 annotation_for_image_count += 1
 

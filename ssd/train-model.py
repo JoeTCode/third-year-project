@@ -54,11 +54,23 @@ dataset = AnprCocoDataset(
 #     images = torch.stack(images, dim=0)  # Stack images into a batch tensor
 #     return images, targets  # Keep targets as a list (does not need padding)
 
+def collate_fn(batch):
+    images = []
+    targets = []
+
+    for sample in batch:
+        images.append(sample[0])  # Image tensor
+        targets.append(sample[1])  # List of annotations (dictionary)
+
+    images = torch.stack(images, dim=0)  # Stack images into a batch
+    return images, targets  # Targets remain as a list of dicts (not a tensor)
+
+
 # now use dataloader function load the
 # dataset in the specified transformation.
 # dataloader = torch.utils.data.DataLoader(dataset, batch_size=4)
 
-train_dataloader = DataLoader(dataset, batch_size=32, shuffle=True, num_workers=0)
+train_dataloader = DataLoader(dataset, batch_size=4, shuffle=True, num_workers=0, collate_fn=collate_fn)
 
 # Load the model with pretrained weights
 model = torchvision.models.detection.ssd300_vgg16(weights=SSD300_VGG16_Weights.DEFAULT)
@@ -72,47 +84,62 @@ class_loss_function = CrossEntropyLoss()
 bbox_loss_function = MSELoss()
 
 
-for epoch in range(1):
+for epoch in range(EPOCHS):
     # Set model to train
     model.train()
 
+    bbox_weight = 1
+    labels_weight = 1
+    totalLoss = 0
     # Initialise the training loss
     train_loss = 0
     # Initialise correct predictions
     train_correct = 0
+   
     for i_batch, sample_batched in enumerate(train_dataloader):
-        images = sample_batched['image']
-        annotations = sample_batched['annotations']
+        images = sample_batched[0]
+        annotations = sample_batched[1]
 
-        print(i_batch, images.size(), annotations.size())
+        # print(i_batch, images.size(), len(annotations))
 
-        images, targets = images.to(device), annotations.to(device)
+        images = images.to(device)
+        # removed imageid from annotations
+        targets = [{key: value.to(device) for key, value in annotation.items() if key != 'image_id'} for annotation in annotations]
+        print(annotations)
+        print(images.size(), len(targets))
+        # perform a forward pass and calculate the training loss
+        predictions = model(images, targets)
 
+        print(predictions)
+        print(predictions['bbox_regression'])
+        print(predictions['classification'])
+
+        bbox_targets = [target['boxes'] for target in targets]
+        bbox_targets = torch.stack(bbox_targets)  # Stack into a tensor
+        labels = [target['labels'] for target in targets]
+        labels = torch.stack(labels)
+        labels = labels.squeeze()
+        print('labels', labels)
+
+        bbox_loss = bbox_loss_function(predictions['bbox_regression'], bbox_targets)
+        class_loss = class_loss_function(predictions['classification'], labels)
+        total_loss = (bbox_weight * bbox_loss) + (labels_weight * class_loss)
+
+        # zero out the gradients, perform the backpropagation step,
+        # and update the weights
         optimizer.zero_grad()
-        outputs = model(images)
-        print(outputs)
-        # class_loss = class_loss_function(outputs[0], targets)
-        # bbox_loss = bbox_loss_function(outputs[1], targets)
+        total_loss.backward()
+        optimizer.step()
+
+        # add the loss to the total training loss so far and
+        # calculate the number of correct predictions
+        # totalTrainLoss += totalLoss
+        # trainCorrect += (predictions['classification'].argmax(1) == labels).type(
+        #     torch.float).sum().item()
+        
 
 
-# for images, targets in train_dataloader:
-#     print(f"images: {images}\n targets: {targets}")
-#     break
-
-"""
-# iter function iterates through all the
-# images and labels and stores in two variables
-images, labels = next(iter(train_dataloader))
-
-print('')
-# print the total no of samples
-print(f'Number of samples: {len(images)}')
-image = images[2][0] # load 3rd sample
-
-# visualize the image
-plt.imshow(image, cmap='gray')
-plt.show()
-
-# print the size of image
-print("Image Size: ", image.size())
-"""
+# for i_batch, sample_batched in enumerate(train_dataloader):
+#     images = sample_batched[0]
+#     annotations = sample_batched[1]
+#     print(images.size())
