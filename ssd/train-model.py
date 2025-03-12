@@ -11,6 +11,8 @@ from torchvision.datasets import CocoDetection
 from custom_dataset import AnprCocoDataset, Resize, ToTensor
 from torch.utils.data import DataLoader
 from torchvision.models.detection.ssd import SSD300_VGG16_Weights
+from torchvision.models.detection.ssd import SSDClassificationHead
+from torchvision.models.detection import _utils
 from torch.nn import CrossEntropyLoss
 from torch.nn import MSELoss
 from config import EPOCHS
@@ -76,7 +78,19 @@ train_dataloader = DataLoader(dataset, batch_size=4, shuffle=True, num_workers=0
 model = torchvision.models.detection.ssd300_vgg16(weights=SSD300_VGG16_Weights.DEFAULT)
 
 num_classes = 2  #  1 class (license plate) + background
-model.head.classification_head.num_classes = num_classes
+# Retrieve the list of input channels.
+in_channels = _utils.retrieve_out_channels(model.backbone, (300, 300))
+# List containing number of anchors based on aspect ratios.
+num_anchors = model.anchor_generator.num_anchors_per_location()
+# The classification head.
+model.head.classification_head = SSDClassificationHead(
+    in_channels=in_channels,
+    num_anchors=num_anchors,
+    num_classes=num_classes,
+)
+
+print(model)
+# model.head.classification_head.num_classes = num_classes
 
 optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9, weight_decay=5e-4)
 lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)
@@ -85,8 +99,7 @@ bbox_loss_function = MSELoss()
 
 
 for epoch in range(EPOCHS):
-    # Set model to train
-    model.train()
+
 
     bbox_weight = 1
     labels_weight = 1
@@ -101,18 +114,19 @@ for epoch in range(EPOCHS):
         annotations = sample_batched[1]
 
         # print(i_batch, images.size(), len(annotations))
-
+        print(type(images))  # This will show the type of 'images'
+        print(images.size())  # Check the shape to verify it's a tensor
         images = images.to(device)
         # removed imageid from annotations
         targets = [{key: value.to(device) for key, value in annotation.items() if key != 'image_id'} for annotation in annotations]
-        print(annotations)
-        print(images.size(), len(targets))
+        print('targets',targets)
+        print(images.size(), targets[0]['boxes'].size(), targets[0]['labels'].size())
+        # Set model to train
+        model.train()
         # perform a forward pass and calculate the training loss
         predictions = model(images, targets)
-
         print(predictions)
-        print(predictions['bbox_regression'])
-        print(predictions['classification'])
+        print(predictions['classification'].size(), predictions['bbox_regression'].size())
 
         bbox_targets = [target['boxes'] for target in targets]
         bbox_targets = torch.stack(bbox_targets)  # Stack into a tensor
