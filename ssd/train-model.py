@@ -2,6 +2,7 @@
 # credit to https://pytorch.org/tutorials/intermediate/torchvision_tutorial.html
 # credit to https://medium.com/@piyushkashyap045/transfer-learning-in-pytorch-fine-tuning-pretrained-models-for-custom-datasets-6737b03d6fa2#:~:text=limited%20hardware%20resources.-,Loading%20Pre%2DTrained%20Models%20in%20PyTorch,models%20module.
 # credit to https://pytorch.org/tutorials/beginner/data_loading_tutorial.html
+import math
 
 import torch
 import torch.optim as optim
@@ -89,7 +90,6 @@ model.head.classification_head = SSDClassificationHead(
     num_classes=num_classes,
 )
 
-print(model)
 # model.head.classification_head.num_classes = num_classes
 
 optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9, weight_decay=5e-4)
@@ -97,46 +97,43 @@ lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1
 class_loss_function = CrossEntropyLoss()
 bbox_loss_function = MSELoss()
 
-
+best_loss = math.inf
 for epoch in range(EPOCHS):
-
 
     bbox_weight = 1
     labels_weight = 1
-    totalLoss = 0
-    # Initialise the training loss
-    train_loss = 0
-    # Initialise correct predictions
-    train_correct = 0
+    total_epoch_loss = 0
    
     for i_batch, sample_batched in enumerate(train_dataloader):
         images = sample_batched[0]
         annotations = sample_batched[1]
 
-        # print(i_batch, images.size(), len(annotations))
-        print(type(images))  # This will show the type of 'images'
-        print(images.size())  # Check the shape to verify it's a tensor
+        # Move images and model to device (CPU or GPU)
         images = images.to(device)
-        # removed imageid from annotations
+        model = model.to(device)
+
+        # Remove image_id from annotations, and move bboxes and labels to device
         targets = [{key: value.to(device) for key, value in annotation.items() if key != 'image_id'} for annotation in annotations]
+
+        # Check the targets list of dictionaries
         print('targets',targets)
+
+        # Print the image dimensions, the shape of the bounding boxes for the first image,
+        # and the shape of the labels for the first image
+        # e.g. torch.Size([2, 3, 300, 300]), torch.Size([1, 4]), torch.Size([1])
+        # (NUM_BATCH, C, H, W), (NUM_BOXES (PER IMAGE), BBOX FORMAT), (NUM_BOXES)
         print(images.size(), targets[0]['boxes'].size(), targets[0]['labels'].size())
+
         # Set model to train
         model.train()
         # perform a forward pass and calculate the training loss
-        predictions = model(images, targets)
-        print(predictions)
-        print(predictions['classification'].size(), predictions['bbox_regression'].size())
+        loss_dict = model(images, targets)
+        print(loss_dict)
 
-        bbox_targets = [target['boxes'] for target in targets]
-        bbox_targets = torch.stack(bbox_targets)  # Stack into a tensor
-        labels = [target['labels'] for target in targets]
-        labels = torch.stack(labels)
-        labels = labels.squeeze()
-        print('labels', labels)
+        bbox_loss = loss_dict['bbox_regression']
+        class_loss = loss_dict['classification']
 
-        bbox_loss = bbox_loss_function(predictions['bbox_regression'], bbox_targets)
-        class_loss = class_loss_function(predictions['classification'], labels)
+        # Can just do predictions['classification'] + predictions['bbox_regression']
         total_loss = (bbox_weight * bbox_loss) + (labels_weight * class_loss)
 
         # zero out the gradients, perform the backpropagation step,
@@ -145,12 +142,15 @@ for epoch in range(EPOCHS):
         total_loss.backward()
         optimizer.step()
 
-        # add the loss to the total training loss so far and
-        # calculate the number of correct predictions
-        # totalTrainLoss += totalLoss
-        # trainCorrect += (predictions['classification'].argmax(1) == labels).type(
-        #     torch.float).sum().item()
-        
+    average_epoch_loss = total_epoch_loss / len(train_dataloader)
+    if average_epoch_loss < best_loss:
+        checkpoint = {
+            'epoch': epoch + 1,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'loss': average_epoch_loss,
+        }
+        torch.save(checkpoint, f'checkpoint_epoch_{epoch + 1}.pth')
 
 
 # for i_batch, sample_batched in enumerate(train_dataloader):

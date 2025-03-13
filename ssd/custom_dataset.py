@@ -218,13 +218,45 @@ def test_sample_dataset(dataset):
         if i == 3:
             break
 
+def collate_fn(batch):
+    images = []
+    targets = []
+
+    for sample in batch:
+        images.append(sample[0])  # Image tensor
+        targets.append(sample[1])  # List of annotations (dictionary)
+
+    images = torch.stack(images, dim=0)  # Stack images into a batch
+    return images, targets  # Targets remain as a list of dicts (not a tensor)
+
+def test_sample_dataset_new(dataset):
+    train_dataloader = DataLoader(dataset, batch_size=4, shuffle=True, num_workers=0, collate_fn=collate_fn)
+    to_pil = transforms.ToPILImage()  # Convert tensor to PIL Image
+
+    for i, (images, annotations) in enumerate(train_dataloader):  # Unpack batch
+        for j in range(len(images)):  # Iterate through batch
+            img = images[j]
+            annots = annotations[j]
+
+            # Convert tensor to PIL image if needed
+            if isinstance(img, torch.Tensor):
+                img = to_pil(img)
+
+            print(f"Sample {i}-{j}: {img.size} -- {len(annots)}, {annots}")
+
+            # Display image with bounding boxes
+            show_bbox(img, annots)
+
+        #if i == 3:  # Stop after 4 batches
+        break
+
 if __name__ == '__main__':
     anpr_coco_dataset = AnprCocoDataset(
         train_annotations_file_path=train_annotations_file,
         train_images_root=train_root,
         transform=transform
     )
-    test_sample_dataset(anpr_coco_dataset)
+    test_sample_dataset_new(anpr_coco_dataset)
 
     # test = [{'id': 0, 'category_id': 0, 'image_id': 0, 'bbox': [127.734375, 172.03124999999997, 19.21875, 10.3125]},
     #         {'id': 0, 'category_id': 0, 'image_id': 0, 'bbox': [127.734375, 172.03124999999997, 19.21875, 10.3125]}, 0, 0, 0]
