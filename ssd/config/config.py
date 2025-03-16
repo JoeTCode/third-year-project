@@ -1,0 +1,11 @@
+MAX_ANNOTATIONS = 5 # After changing this value re-run 'convert-yolo-to-coco.py'
+BBOX_LENGTH = 4
+EPOCHS = 1
+HPC = False
+PRINT_FREQ = 100
+IMPROVEMENT_FACTOR = 0.9
+COCO_TRAIN_ROOT = "/Users/joe/Desktop/eu-dataset/train/images"
+COCO_TRAIN_ANNOTATIONS_FILE = "../eu_train_dataset_coco.json"
+BATCH_SIZE = 4
+TRAIN_IMAGES_ROOT = "/Users/joe/Desktop/eu-dataset/train/images"
+TRAIN_ANNOTATIONS_ROOT = "/Users/joe/Desktop/eu-dataset/train/labels"

@@ -3,7 +3,7 @@
 from PIL import Image
 import os
 import json
-from config import MAX_ANNOTATIONS
+from ssd.config.config import MAX_ANNOTATIONS
 
 def preprocess_dataset(images_path, labels_path):
     # creates list of image names without file extension
@@ -94,6 +94,6 @@ images_path = "/Users/joe/Desktop/eu-dataset/train/images"
 labels_path = "/Users/joe/Desktop/eu-dataset/train/labels"
 
 # Path to output JSON file
-output_file = 'eu-train-dataset-coco.json'
+output_file = 'eu_train_dataset_coco.json'
 
 convert_to_coco(images_path, labels_path, output_file)
