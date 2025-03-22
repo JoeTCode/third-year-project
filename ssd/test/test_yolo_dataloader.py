@@ -1,9 +1,8 @@
-from ssd.custom_coco_dataset_loader import AnprCocoDataset, Resize, ToTensor
-from ssd.config.config import COCO_TRAIN_ROOT, COCO_TRAIN_ANNOTATIONS_FILE, BATCH_SIZE
+from ssd.custom_yolo_dataset_loader import AnprYoloDataset, Resize, ToTensor
+from ssd.config.config import TRAIN_IMAGES_ROOT, TRAIN_ANNOTATIONS_ROOT, BATCH_SIZE
 from torch.utils.data import DataLoader
 from torchvision import transforms
 import torch
-from ssd.train_model import collate_fn
 
 
 transform = transforms.Compose([
@@ -11,19 +10,31 @@ transform = transforms.Compose([
     ToTensor()
 ])
 
-dataset = AnprCocoDataset(
-    train_annotations_file_path=COCO_TRAIN_ANNOTATIONS_FILE,
-    train_images_root=COCO_TRAIN_ROOT,
-    transform=transform
-)
+anpr_yolo_dataset = AnprYoloDataset(
+        annotations_root=TRAIN_ANNOTATIONS_ROOT,
+        images_root=TRAIN_IMAGES_ROOT,
+        transform=transform
+    )
 
 
-def test_coco_dataloader(end_test, image_shape, has_background_images, drop_last, batch_size=BATCH_SIZE):
+def collate_fn(batch):
+    images = []
+    targets = []
+
+    for sample in batch:
+        images.append(sample[0])  # Image tensor
+        targets.append(sample[1])  # List of annotations (dictionary)
+
+    images = torch.stack(images, dim=0)  # Stack images into a batch
+    return images, targets  # Targets remain as a list of dicts (not a tensor)
+
+
+def test_yolo_dataloader(end_test, image_shape, has_background_images, drop_last, batch_size=BATCH_SIZE):
     assert isinstance(image_shape, tuple) and len(image_shape) == 3, "Please provide tuple in the form (C, H, W)"
     channels, height, width = image_shape
 
     train_dataloader = DataLoader(
-        dataset, batch_size=batch_size, shuffle=True, num_workers=0, collate_fn=collate_fn, drop_last=drop_last
+        anpr_yolo_dataset, batch_size=batch_size, shuffle=True, num_workers=0, collate_fn=collate_fn, drop_last=drop_last
     )
 
     for i_batch, sample_batched in enumerate(train_dataloader):
@@ -53,4 +64,4 @@ def test_coco_dataloader(end_test, image_shape, has_background_images, drop_last
             break
 
 
-test_coco_dataloader(5, (3, 300, 300), False, True)
+test_yolo_dataloader(5, (3, 300, 300), False, True)

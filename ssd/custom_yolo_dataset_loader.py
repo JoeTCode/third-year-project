@@ -1,9 +1,7 @@
 import os
-import json
 import torch
 import warnings
 from PIL import Image, ImageDraw
-import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from ssd.config.config import MAX_ANNOTATIONS, BBOX_LENGTH, TRAIN_IMAGES_ROOT, TRAIN_ANNOTATIONS_ROOT, BATCH_SIZE
@@ -151,7 +149,9 @@ class AnprYoloDataset(Dataset):
         f = open(file_path, 'r')
         lines = f.readlines()
         bboxes = [reformat_bbox(line.split(" ")[1:], image_height, image_width) for line in lines]
-        if not lines: labels = [0] # If no bboxes are found, make the image a background class image (0)
+        if len(bboxes) == 0:
+            labels = [0] # If no bboxes are found, make the image a background class image (0)
+            bboxes = [[0, 0, 1, 1]] # Create a small bbox for background image
         else: labels = [int(line.split(" ")[0]) + 1 for line in lines]
         f.close()
 
@@ -192,8 +192,3 @@ def collate_fn(batch):
 
     images = torch.stack(images, dim=0)  # Stack images into a batch
     return images, targets  # Targets remain as a list of dicts (not a tensor)
-
-
-# train_dataloader = DataLoader(anpr_yolo_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0, collate_fn=collate_fn)
-# for i_batch, sample_batched in enumerate(train_dataloader):
-#     print(i_batch, sample_batched)
