@@ -13,18 +13,21 @@ from torch.utils.data import DataLoader
 from torchvision.models.detection.ssd import SSD300_VGG16_Weights
 from torchvision.models.detection.ssd import SSDClassificationHead
 from torchvision.models.detection import _utils
-from ssd.config.config import EPOCHS, HPC, PRINT_FREQ, IMPROVEMENT_FACTOR, TRAIN_IMAGES_ROOT, TRAIN_ANNOTATIONS_ROOT, \
-    VALID_IMAGES_ROOT, VALID_ANNOTATIONS_ROOT, BATCH_SIZE
+from ssd.config.config import EPOCHS, HPC, NUM_LOGS, IMPROVEMENT_FACTOR, TRAIN_IMAGES_ROOT, TRAIN_ANNOTATIONS_ROOT, \
+    VALID_IMAGES_ROOT, VALID_ANNOTATIONS_ROOT, BATCH_SIZE, BBOX_WEIGHT, LABELS_WEIGHT, SAVE_IMAGE_DIRECTORY, VERBOSE
 from torchmetrics.detection import MeanAveragePrecision
+from show_predictions import map_bbox_to_image
+from torchvision.ops import nms
 
-# train on the GPU or on the CPU, if a GPU is not available
+# train on the GPU, or on the CPU if a GPU is not available
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-print("CUDA detected: ", torch.cuda.is_available())  # Should print True if CUDA is detected
-print("CUDA version: ", torch.version.cuda)  # Check the CUDA version PyTorch is built with
-print("GPU count: ", torch.cuda.device_count())  # Number of GPUs available
-print("GPU name: ", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "No GPU detected")
-print('Device used:', device)
+if torch.cuda.is_available():
+    print("CUDA version:", torch.version.cuda)  # Check the CUDA version PyTorch is built with
+    print("GPU count:", torch.cuda.device_count())  # Number of GPUs available
+    print("GPU name:", torch.cuda.get_device_name(0))
+else:
+    print('Device used:', device)
 
 # Perform transformations using transforms function
 transform = transforms.Compose([
@@ -96,14 +99,19 @@ optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9, weight_decay=5
 lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)
 
 best_loss = math.inf
-bbox_weight = 1
-labels_weight = 1
 model = model.to(device)
+
+total_steps = len(train_dataloader)  # Finds the number of batches
+log_interval = total_steps // NUM_LOGS  # Find the intervals at which to print the log
+
+if log_interval == 0:  # Prevents modulo error if total_steps < NUM_LOGS meaning log_interval will equal zero
+    log_interval = 1
 
 for epoch in range(EPOCHS):
 
+    start_time_for_epoch = time.time()
     total_epoch_loss = 0
-    time_till_print = 0
+    time_for_log_interval = 0
     model.train()  # Set model to train
 
     for i_batch, sample_batched in enumerate(train_dataloader):
@@ -127,8 +135,7 @@ for epoch in range(EPOCHS):
         bbox_loss = loss_dict['bbox_regression']
         class_loss = loss_dict['classification']
 
-        # Can just do predictions['classification'] + predictions['bbox_regression']
-        total_loss = (bbox_weight * bbox_loss) + (labels_weight * class_loss)
+        total_loss = (BBOX_WEIGHT * bbox_loss) + (LABELS_WEIGHT * class_loss)
 
         # zero out the gradients, perform the backpropagation step,
         # and update the weights
@@ -136,27 +143,33 @@ for epoch in range(EPOCHS):
         total_loss.backward()
         optimizer.step()
         total_epoch_loss += total_loss.item()
-        time_till_print += (time.time() - start_time)
+        time_for_log_interval += (time.time() - start_time)
 
-        if i_batch % PRINT_FREQ == 0:
-            multiplier = PRINT_FREQ if i_batch != 0 else 1
+        if i_batch % log_interval == 0 and VERBOSE:
             bbox_regression = round(float(list(loss_dict.values())[0]), 4)
             classification = round(float(list(loss_dict.values())[1]), 4)
 
             print(f'epoch: {epoch:<3}'
                   f'step: {i_batch + 1}/{len(train_dataloader) + 1:<6}'
                   f'bbox_regression: {bbox_regression}, classification: {classification:<6}'
-                  f'    time: {round(time_till_print, 2)} s')
-            time_till_print = 0
+                  f'    time: {round(time_for_log_interval, 2)} s')
+            time_for_log_interval = 0
+
+    time_for_epoch = time.time() - start_time_for_epoch
+    average_epoch_loss = total_epoch_loss / len(train_dataloader)
+    print(f'Average training loss for epoch {epoch + 1}: {average_epoch_loss:<4}'
+          f'  time: {round(time_for_epoch, 2)} s')
 
     # Step scheduler after epoch
     lr_scheduler.step()
 
+
+    evaluation_start_time = time.time()
     # switch off autograd
     with torch.no_grad():
         metric = MeanAveragePrecision(iou_type="bbox").to(device)  # Initialise and move metric to device
+        # model = model.to(device)
         model.eval()  # set model to evaluation mode
-        model = model.to(device)
 
         # Loop over the validation set
         for i_batch, sample_batched in enumerate(valid_dataloader):
@@ -174,19 +187,37 @@ for epoch in range(EPOCHS):
 
             # Make the predictions
             predictions = model(images)
-
             metric.update(predictions, targets)
+
+            # Generate image only when the eval is at its last batch
+            if i_batch == len(valid_dataloader) - 1:
+                predicted_bboxes = predictions[0]['boxes']
+                predicted_scores = predictions[0]['scores']
+
+                # Apply Non-Maximum Suppression to bboxes.
+                # This eliminates lower confidence score boxes that overlap multiple other bboxes,
+                # reducing the amount of redundant predictions.
+                print(predicted_scores)
+                score_threshold = 0.5
+                thresholded_score_mask = predicted_scores > score_threshold
+                print(thresholded_score_mask)
+                keep_indices = nms(predicted_bboxes[thresholded_score_mask], predicted_scores[thresholded_score_mask], iou_threshold=0.5)
+                print(keep_indices)
+                nms_predicted_bboxes = predicted_bboxes[keep_indices]
+                nms_predicted_scores = predicted_scores[keep_indices]
+
+                # Generate and store visualised predictions
+                map_bbox_to_image(images[0], annotations[0]['boxes'], nms_predicted_bboxes, nms_predicted_scores,
+                                  SAVE_IMAGE_DIRECTORY)
 
         # Compute final mAP over all batches
         metrics = metric.compute()
         map, map_50, map_75 = metrics['map'].item(), metrics['map_50'].item(), metrics['map_75'].item()
-
+        evaluation_time = time.time() - evaluation_start_time
         print(f'mAP: {(map):<4}'
               f'  mAP-50: {map_50:<4}'
-              f'  mAP-75: {map_75}')
-
-    average_epoch_loss = total_epoch_loss / len(train_dataloader)
-    print('Average training loss for epoch:', average_epoch_loss)
+              f'  mAP-75: {map_75:<4}'
+              f'  time: {round(evaluation_time, 2)} s')
 
     if average_epoch_loss < best_loss * IMPROVEMENT_FACTOR:
         checkpoint = {

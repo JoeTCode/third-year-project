@@ -1,11 +1,15 @@
 MAX_ANNOTATIONS = 5 # After changing this value re-run 'convert-yolo-to-coco.py'
 BBOX_LENGTH = 4
+BBOX_WEIGHT = 1
+LABELS_WEIGHT = 1
 EPOCHS = 1
 HPC = False
-PRINT_FREQ = 10
+NUM_LOGS = 10
 IMPROVEMENT_FACTOR = 0.9
 BATCH_SIZE = 4
 TRAIN_IMAGES_ROOT = "/Users/joe/Desktop/eu-dataset/train/images"
 TRAIN_ANNOTATIONS_ROOT = "/Users/joe/Desktop/eu-dataset/train/labels"
 VALID_IMAGES_ROOT = "/Users/joe/Desktop/eu-dataset/valid/images"
 VALID_ANNOTATIONS_ROOT = "/Users/joe/Desktop/eu-dataset/valid/labels"
+VERBOSE = False
+SAVE_IMAGE_DIRECTORY = "../ssd-predictions"
