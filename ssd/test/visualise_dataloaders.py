@@ -1,8 +1,8 @@
 import torch
 from PIL import Image, ImageDraw
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
 from torchvision import transforms
-from ssd.config.config import MAX_ANNOTATIONS, BBOX_LENGTH, TRAIN_IMAGES_ROOT, TRAIN_ANNOTATIONS_ROOT, BATCH_SIZE
+from config import config
 from ssd.custom_yolo_dataset_loader import AnprYoloDataset, Resize, ToTensor
 
 
@@ -76,7 +76,7 @@ def collate_fn(batch):
 
 
 def test_sample_dataset_new(dataset):
-    train_dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0, collate_fn=collate_fn)
+    train_dataloader = DataLoader(dataset, batch_size=config.BATCH_SIZE, shuffle=True, num_workers=0, collate_fn=collate_fn)
     to_pil = transforms.ToPILImage()  # Convert tensor to PIL Image
 
     for i, (images, annotations) in enumerate(train_dataloader):  # Unpack batch
@@ -99,8 +99,8 @@ def test_sample_dataset_new(dataset):
 
 if __name__ == '__main__':
     anpr_yolo_dataset = AnprYoloDataset(
-        annotations_root=TRAIN_ANNOTATIONS_ROOT,
-        images_root=TRAIN_IMAGES_ROOT,
+        annotations_root=config.TRAIN_ANNOTATIONS_ROOT,
+        images_root=config.TRAIN_IMAGES_ROOT,
         transform=transform
     )
     test_sample_dataset_new(anpr_yolo_dataset)

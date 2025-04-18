@@ -2,7 +2,6 @@
 # credit to https://pytorch.org/tutorials/intermediate/torchvision_tutorial.html
 # credit to https://medium.com/@piyushkashyap045/transfer-learning-in-pytorch-fine-tuning-pretrained-models-for-custom-datasets-6737b03d6fa2#:~:text=limited%20hardware%20resources.-,Loading%20Pre%2DTrained%20Models%20in%20PyTorch,models%20module.
 # credit to https://pytorch.org/tutorials/beginner/data_loading_tutorial.html
-import math
 import time
 import torch
 import torch.optim as optim
@@ -13,11 +12,34 @@ from torch.utils.data import DataLoader
 from torchvision.models.detection.ssd import SSD300_VGG16_Weights
 from torchvision.models.detection.ssd import SSDClassificationHead
 from torchvision.models.detection import _utils
-from ssd.config.config import EPOCHS, HPC, NUM_LOGS, IMPROVEMENT_FACTOR, TRAIN_IMAGES_ROOT, TRAIN_ANNOTATIONS_ROOT, \
-    VALID_IMAGES_ROOT, VALID_ANNOTATIONS_ROOT, BATCH_SIZE, BBOX_WEIGHT, LABELS_WEIGHT, SAVE_IMAGE_DIRECTORY, VERBOSE
+from config import config
 from torchmetrics.detection import MeanAveragePrecision
 from show_predictions import map_bbox_to_image
 from torchvision.ops import nms
+import os
+
+if config.HPC: SAVE_CHECKPOINTS_DIRECTORY = '/gpfs/home/hyg22ktu/train-ssd/ssd-weights'
+else: SAVE_CHECKPOINTS_DIRECTORY = './ssd_weights'
+
+def create_checkpoints_sub_directory(save_directory_path):
+    folder_number = 1
+    checkpoint_directory_name = 'ssd_weights_'
+
+    if not os.path.exists(save_directory_path):
+        os.makedirs(save_directory_path)
+
+    checkpoints = os.listdir(save_directory_path)
+    if len(checkpoints) > 0:
+        numbers = [int(checkpoint.split('_')[2]) for checkpoint in checkpoints]
+        numbers.sort()
+        folder_number = numbers[-1] + 1
+
+    checkpoint_directory_name += str(folder_number)
+    os.makedirs(os.path.join(save_directory_path, checkpoint_directory_name))
+    return checkpoint_directory_name
+
+
+CHECKPOINTS_SUB_DIRECTORY = create_checkpoints_sub_directory(SAVE_CHECKPOINTS_DIRECTORY)
 
 # train on the GPU, or on the CPU if a GPU is not available
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -36,14 +58,14 @@ transform = transforms.Compose([
 ])
 
 train_dataset = AnprYoloDataset(
-    annotations_root=TRAIN_ANNOTATIONS_ROOT,
-    images_root=TRAIN_IMAGES_ROOT,
+    annotations_root=config.TRAIN_ANNOTATIONS_ROOT,
+    images_root=config.TRAIN_IMAGES_ROOT,
     transform=transform
 )
 
 valid_dataset = AnprYoloDataset(
-    annotations_root=VALID_ANNOTATIONS_ROOT,
-    images_root=VALID_IMAGES_ROOT,
+    annotations_root=config.VALID_ANNOTATIONS_ROOT,
+    images_root=config.VALID_IMAGES_ROOT,
     transform=transform
 )
 
@@ -61,7 +83,7 @@ def collate_fn(batch):
 
 
 # Use dataloader function load the dataset in the specified transformation.
-if HPC:
+if config.HPC:
     train_dataloader = DataLoader(
         train_dataset, batch_size=32, shuffle=True, num_workers=1, pin_memory=True, collate_fn=collate_fn
     )
@@ -70,10 +92,10 @@ if HPC:
     )
 else:
     train_dataloader = DataLoader(
-        train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0, collate_fn=collate_fn
+        train_dataset, batch_size=config.BATCH_SIZE, shuffle=True, num_workers=0, collate_fn=collate_fn
     )
     valid_dataloader = DataLoader(
-        valid_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=0, collate_fn=collate_fn
+        valid_dataset, batch_size=config.BATCH_SIZE, shuffle=False, num_workers=0, collate_fn=collate_fn
     )
 
 # Load the model with pretrained weights
@@ -98,16 +120,17 @@ model.head.classification_head = SSDClassificationHead(
 optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9, weight_decay=5e-4)
 lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)
 
-best_loss = math.inf
+best_map = 0
+patience_counter = 0
 model = model.to(device)
 
 total_steps = len(train_dataloader)  # Finds the number of batches
-log_interval = total_steps // NUM_LOGS  # Find the intervals at which to print the log
+log_interval = total_steps // config.NUM_LOGS  # Find the intervals at which to print the log
 
 if log_interval == 0:  # Prevents modulo error if total_steps < NUM_LOGS meaning log_interval will equal zero
     log_interval = 1
 
-for epoch in range(EPOCHS):
+for epoch in range(config.EPOCHS):
 
     start_time_for_epoch = time.time()
     total_epoch_loss = 0
@@ -135,7 +158,7 @@ for epoch in range(EPOCHS):
         bbox_loss = loss_dict['bbox_regression']
         class_loss = loss_dict['classification']
 
-        total_loss = (BBOX_WEIGHT * bbox_loss) + (LABELS_WEIGHT * class_loss)
+        total_loss = (config.BBOX_WEIGHT * bbox_loss) + (config.LABELS_WEIGHT * class_loss)
 
         # zero out the gradients, perform the backpropagation step,
         # and update the weights
@@ -145,7 +168,7 @@ for epoch in range(EPOCHS):
         total_epoch_loss += total_loss.item()
         time_for_log_interval += (time.time() - start_time)
 
-        if i_batch % log_interval == 0 and VERBOSE:
+        if i_batch % log_interval == 0 and config.VERBOSE:
             bbox_regression = round(float(list(loss_dict.values())[0]), 4)
             classification = round(float(list(loss_dict.values())[1]), 4)
 
@@ -197,18 +220,18 @@ for epoch in range(EPOCHS):
                 # Apply Non-Maximum Suppression to bboxes.
                 # This eliminates lower confidence score boxes that overlap multiple other bboxes,
                 # reducing the amount of redundant predictions.
-                print(predicted_scores)
+                #print(predicted_scores)
                 score_threshold = 0.5
                 thresholded_score_mask = predicted_scores > score_threshold
-                print(thresholded_score_mask)
+                #print(thresholded_score_mask)
                 keep_indices = nms(predicted_bboxes[thresholded_score_mask], predicted_scores[thresholded_score_mask], iou_threshold=0.5)
-                print(keep_indices)
+                #print(keep_indices)
                 nms_predicted_bboxes = predicted_bboxes[keep_indices]
                 nms_predicted_scores = predicted_scores[keep_indices]
 
                 # Generate and store visualised predictions
                 map_bbox_to_image(images[0], annotations[0]['boxes'], nms_predicted_bboxes, nms_predicted_scores,
-                                  SAVE_IMAGE_DIRECTORY)
+                                  config.SAVE_IMAGE_DIRECTORY)
 
         # Compute final mAP over all batches
         metrics = metric.compute()
@@ -219,12 +242,19 @@ for epoch in range(EPOCHS):
               f'  mAP-75: {map_75:<4}'
               f'  time: {round(evaluation_time, 2)} s')
 
-    if average_epoch_loss < best_loss * IMPROVEMENT_FACTOR:
-        checkpoint = {
-            'epoch': epoch + 1,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'loss': average_epoch_loss,
-        }
-
-        torch.save(checkpoint, f'checkpoint_epoch_{epoch + 1}.pth')
+        if map > best_map + config.MAP_MIN_DIFFERENCE:
+            best_map = map
+            patience_counter = 0
+            checkpoint = {
+                'epoch': epoch + 1,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': average_epoch_loss,
+            }
+            save_path = os.path.join(SAVE_CHECKPOINTS_DIRECTORY, CHECKPOINTS_SUB_DIRECTORY, f'checkpoint_epoch_{epoch + 1}.pth')
+            torch.save(checkpoint, save_path)
+        else:
+            patience_counter += 1
+            if patience_counter >= config.PATIENCE:
+                print(f"No mAP improvement, patience limit reached. Stopping at epoch {epoch}")
+                break

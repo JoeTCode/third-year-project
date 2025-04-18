@@ -7,10 +7,9 @@ from torch.utils.data import DataLoader
 from torchvision.models.detection.ssd import SSD300_VGG16_Weights
 from torchvision.models.detection.ssd import SSDClassificationHead
 from torchvision.models.detection import _utils
-from ssd.config.config import HPC, VALID_IMAGES_ROOT, VALID_ANNOTATIONS_ROOT, BATCH_SIZE, SAVE_IMAGE_DIRECTORY
+from config import config
 from torchmetrics.detection import MeanAveragePrecision
 from show_predictions import map_bbox_to_image
-from torchvision.ops import nms
 
 # perform inference on the GPU, or on the CPU if a GPU is not available
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -22,8 +21,8 @@ transform = transforms.Compose([
 ])
 
 valid_dataset = AnprYoloDataset(
-    annotations_root=VALID_ANNOTATIONS_ROOT,
-    images_root=VALID_IMAGES_ROOT,
+    annotations_root=config.VALID_ANNOTATIONS_ROOT,
+    images_root=config.VALID_IMAGES_ROOT,
     transform=transform
 )
 
@@ -39,13 +38,13 @@ def collate_fn(batch):
     return images, targets  # Targets remain as a list of dicts (not a tensor)
 
 # Use dataloader function load the dataset in the specified transformation.
-if HPC:
+if config.HPC:
     valid_dataloader = DataLoader(
         valid_dataset, batch_size=32, shuffle=False, num_workers=1, pin_memory=True, collate_fn=collate_fn
     )
 else:
     valid_dataloader = DataLoader(
-        valid_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=0, collate_fn=collate_fn
+        valid_dataset, batch_size=config.BATCH_SIZE, shuffle=False, num_workers=0, collate_fn=collate_fn
     )
 
 # Load the model with pretrained weights
@@ -99,31 +98,11 @@ for i_batch, sample_batched in enumerate(valid_dataloader):
 
     # Generate image only when the eval is at its last batch
     #if i_batch == len(valid_dataloader) - 1:
-    if True:
-        predicted_bboxes = predictions[0]['boxes']
-        predicted_scores = predictions[0]['scores']
+    # pass predictions twice as we access boxes and scores from it\
 
-        # Filter out all bboxes that have confidence scores below the score threshold (this step is needed as NMS
-        # doesn't effectively get rid of all un-accurate bounding boxes, and there can be hundreds of detections per
-        # image)
-        bbox_score_threshold = 0.4
-        score_confidence_mask = predicted_scores > bbox_score_threshold
-        masked_predicted_bboxes = predicted_bboxes[score_confidence_mask]
-        masked_predicted_scores = predicted_scores[score_confidence_mask]
-
-        # Apply Non-Maximum Suppression to bboxes. This eliminates lower confidence score boxes that overlap multiple
-        # other bboxes, reducing the amount of redundant predictions.
-        keep_indices = nms(masked_predicted_bboxes, masked_predicted_scores,
-                           iou_threshold=0.5)
-        nms_predicted_bboxes = masked_predicted_bboxes[keep_indices]
-        nms_predicted_scores = masked_predicted_scores[keep_indices]
-
-        print(f"Before mask: {len(predicted_bboxes)}, After mask: {len(masked_predicted_bboxes)}")
-        print(f"Before NMS: {len(masked_predicted_bboxes)}, After NMS: {len(nms_predicted_bboxes)}")
-
-        # Generate and store visualised predictions
-        map_bbox_to_image(images[0], annotations[0]['boxes'], nms_predicted_bboxes, nms_predicted_scores,
-                          SAVE_IMAGE_DIRECTORY)
+    if i_batch % config.NUM_LOGS == 0:
+        map_bbox_to_image(images, targets, predictions, predictions,
+                          config.SAVE_IMAGE_DIRECTORY)
 
 # Compute final mAP over all batches
 metrics = metric.compute()

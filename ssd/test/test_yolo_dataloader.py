@@ -1,7 +1,8 @@
 from ssd.custom_yolo_dataset_loader import AnprYoloDataset, Resize, ToTensor
-from ssd.config.config import TRAIN_IMAGES_ROOT, TRAIN_ANNOTATIONS_ROOT, BATCH_SIZE
+from config import config
 from torch.utils.data import DataLoader
 from torchvision import transforms
+from PIL import Image
 import torch
 
 
@@ -11,8 +12,8 @@ transform = transforms.Compose([
 ])
 
 anpr_yolo_dataset = AnprYoloDataset(
-        annotations_root=TRAIN_ANNOTATIONS_ROOT,
-        images_root=TRAIN_IMAGES_ROOT,
+        annotations_root=config.TRAIN_ANNOTATIONS_ROOT,
+        images_root=config.TRAIN_IMAGES_ROOT,
         transform=transform
     )
 
@@ -29,7 +30,7 @@ def collate_fn(batch):
     return images, targets  # Targets remain as a list of dicts (not a tensor)
 
 
-def test_yolo_dataloader(end_test, image_shape, has_background_images, drop_last, batch_size=BATCH_SIZE):
+def test_yolo_dataloader(end_test, image_shape, has_background_images, drop_last, batch_size=config.BATCH_SIZE):
     assert isinstance(image_shape, tuple) and len(image_shape) == 3, "Please provide tuple in the form (C, H, W)"
     channels, height, width = image_shape
 
@@ -64,4 +65,29 @@ def test_yolo_dataloader(end_test, image_shape, has_background_images, drop_last
             break
 
 
-test_yolo_dataloader(5, (3, 300, 300), False, True)
+#test_yolo_dataloader(5, (3, 300, 300), False, True)
+
+
+train_dataloader = DataLoader(
+    anpr_yolo_dataset, batch_size=1, shuffle=True, num_workers=0, collate_fn=collate_fn
+)
+
+# In the form (image_tensor, {'image_id': tensor(1), 'boxes': tensor([[bbox], [bbox]), 'labels': tensor([1, 1])})
+image_tensor1, annotations1 = anpr_yolo_dataset[0]
+image_tensor2, annotations2 = anpr_yolo_dataset[1]
+image_tensor3, annotations3 = anpr_yolo_dataset[2]
+image_tensor4, annotations4 = anpr_yolo_dataset[3]
+
+pil1 = transforms.ToPILImage()(image_tensor1)
+pil2 = transforms.ToPILImage()(image_tensor2)
+pil3 = transforms.ToPILImage()(image_tensor3)
+pil4 = transforms.ToPILImage()(image_tensor4)
+
+
+
+
+
+# for i_batch, sample_batched in enumerate(train_dataloader):
+#     img_batch, annotations_batch = sample_batched
+#     print(img_batch[0])
+#     break

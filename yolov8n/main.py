@@ -3,4 +3,4 @@ from ultralytics import YOLO
 # model = YOLO("yolov8n.yaml") # not pretrained
 model = YOLO("yolov8n.pt") # pretrained
 
-results = model.train(data="config.yaml", epochs=50)
+results = model.train(data="config.yaml", epochs=25, patience=5)

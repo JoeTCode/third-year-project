@@ -1,13 +1,13 @@
 import os
 import torch
 import warnings
-from PIL import Image, ImageDraw
-from torch.utils.data import Dataset, DataLoader
+from PIL import Image
+from torch.utils.data import Dataset
 from torchvision import transforms
-from ssd.config.config import MAX_ANNOTATIONS, BBOX_LENGTH, TRAIN_IMAGES_ROOT, TRAIN_ANNOTATIONS_ROOT, BATCH_SIZE
+from config import config
 
-image_files = [image for image in os.listdir(TRAIN_IMAGES_ROOT)]
-annotations_files = [annotation for annotation in os.listdir(TRAIN_ANNOTATIONS_ROOT)]
+image_files = [image for image in os.listdir(config.TRAIN_IMAGES_ROOT)]
+annotations_files = [annotation for annotation in os.listdir(config.TRAIN_ANNOTATIONS_ROOT)]
 
 
 class Resize:
@@ -71,10 +71,10 @@ class ToTensor:
 
 def reformat_bbox(bbox, image_height, image_width):
     """
-    Converts COCO bounding box: [x_min, y_min, width, height] to pytorch bounding box: [x_min, y_min, x_max, y_max].
+    Converts YOLO bounding box: [x_center, y_center, width, height] to pytorch bounding box: [x_min, y_min, x_max, y_max].
     :param image_width:
     :param image_height:
-    :param bbox: (List), [x_min, y_min, width, height].
+    :param bbox: (List), [x_center, y_center, width, height].
     :return: (List), [x_min, y_min, x_max, y_max].
     """
     x_center, y_center, width, height = float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])
@@ -177,8 +177,8 @@ transform = transforms.Compose([
 ])
 
 anpr_yolo_dataset = AnprYoloDataset(
-        annotations_root=TRAIN_ANNOTATIONS_ROOT,
-        images_root=TRAIN_IMAGES_ROOT,
+        annotations_root=config.TRAIN_ANNOTATIONS_ROOT,
+        images_root=config.TRAIN_IMAGES_ROOT,
         transform=transform
     )
 
