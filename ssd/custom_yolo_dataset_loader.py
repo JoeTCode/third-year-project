@@ -1,13 +1,169 @@
 import os
 import torch
 import warnings
-from PIL import Image
+from PIL import Image, ImageDraw
 from torch.utils.data import Dataset
 from torchvision import transforms
 from config import config
+from random import choices, randint
 
 image_files = [image for image in os.listdir(config.TRAIN_IMAGES_ROOT)]
 annotations_files = [annotation for annotation in os.listdir(config.TRAIN_ANNOTATIONS_ROOT)]
+
+def find_overlap_bbox(bbox, crop, overlap_ratio_to_original=0.1):
+
+    overlap_bbox = None
+    x_min, y_min, x_max, y_max = bbox
+    crop_x_min, crop_y_min, crop_x_max, crop_y_max = crop
+
+    x_overlap_min = max(x_min, crop_x_min)
+    y_overlap_min = max(y_min, crop_y_min)
+    x_overlap_max = min(x_max, crop_x_max)
+    y_overlap_max = min(y_max, crop_y_max)
+
+    if x_overlap_max > x_overlap_min and y_overlap_max > y_overlap_min:
+        # Overlap exists
+        overlap_bbox = [x_overlap_min - crop_x_min, y_overlap_min - crop_y_min, x_overlap_max - crop_x_min, y_overlap_max - crop_y_min]
+        if int(overlap_bbox[0]) == 0:
+            overlap_bbox[0] = 1
+        if int(overlap_bbox[1]) == 0:
+            overlap_bbox[1] = 1
+        if int(overlap_bbox[2]) == 300:
+            overlap_bbox[2] = 299
+        if int(overlap_bbox[3]) == 300:
+            overlap_bbox[3] = 299
+
+    if overlap_bbox:
+        overlap_width = overlap_bbox[2] - overlap_bbox[0]
+        overlap_height = overlap_bbox[3] - overlap_bbox[1]
+        overlap_bbox_area = overlap_width * overlap_height
+        overlap_bbox_area = float(overlap_bbox_area)
+
+        bbox_width = bbox[2] - bbox[0]
+        bbox_height = bbox[3] - bbox[1]
+        bbox_area = bbox_width * bbox_height
+        bbox_area = float(bbox_area)
+
+        if overlap_bbox_area/bbox_area < overlap_ratio_to_original:
+            #print(f"Original area: {bbox_area}, Overlap area: {overlap_bbox_area}, Ratio: {overlap_bbox_area / bbox_area}")
+            return None
+
+    return overlap_bbox
+
+def create_mosaic(images, annotations, idx=0):
+    # Doesn't add all image ids (random_idx) to image_id, only the one image_id = idx
+    """
+
+    :param idx: Index of the first image in the mosaic
+    :param images:
+        PIL image list in the form [image, image, image, image]. These will be stitched together to make a 2x2 image
+        and 600x600 dimension mosaic.
+    :param annotations:
+        List of dictionaries in the form [{'image_id': tensor(1), 'boxes': tensor([[bbox], [bbox]]), 'labels': tensor([1, 1])}]
+        corresponding to each image.
+    :return:
+        Returns an image tensor and its annotations. The image is cropped mosaic of size 300x300. The annotation is a
+        single annotation's dictionary. If the cropped image has no plate detections, the annotation label should be
+        set as background.
+    """
+    assert len(images) == 4, "Please provide four (PIL) images"
+
+    for i, image in enumerate(images):
+        assert isinstance(image, Image.Image), "Please provide (four) PIL images"
+        w, h = image.size
+        if w > 300 or h > 300:
+            # if not config.HPC: images[i] = image.resize((300, 300), Image.Resampling.LANCZOS)
+            # else: images[i] = image.resize((300, 300), Image.ANTIALIAS)
+            resized_dict = Resize((300,300))({"image": image, "annotations": annotations[i]})
+            resized_image, resized_annotations = resized_dict["image"], resized_dict["annotations"]
+            images[i] = resized_image
+            annotations[i] = resized_annotations
+
+    im1, im2, im3, im4 = images
+
+    total_width = im1.width + im2.width + im3.width + im4.width
+    total_height = im1.height + im2.height + im3.height + im4.height
+    # Canvas to stitch together images
+    # Will have size of 600x600 - will crop to make it 300x300
+    mosaic = Image.new('RGB', (int(total_width/2), int(total_height/2))) # 2x2 mosaic
+    mosaic.paste(im1, (0, 0))
+    mosaic.paste(im2, (im1.width, 0))
+    mosaic.paste(im3, (0, im1.height))
+    mosaic.paste(im4, (im1.width, im1.height))
+
+    # Start drawing bboxes
+    # draw = ImageDraw.Draw(mosaic)
+    image_number = 1
+    mosaic_bboxes = [[], [], [], []]
+    # Adjust bboxes after stitching images together into mosaic
+    for annotation in annotations:
+        bboxes = annotation['boxes']
+        for bbox in bboxes:
+            x_min, y_min, x_max, y_max = bbox
+            if isinstance(x_min, torch.Tensor):
+                x_min = x_min.item()
+                y_min = y_min.item()
+                x_max = x_max.item()
+                y_max = y_max.item()
+
+            if image_number == 1:
+                mosaic_bboxes[0].append([x_min, y_min, x_max, y_max])
+
+            if image_number == 2:
+                x_min += im1.width
+                x_max += im1.width
+                mosaic_bboxes[1].append([x_min, y_min, x_max, y_max])
+
+            if image_number == 3:
+                y_min += im1.height
+                y_max += im1.height
+                mosaic_bboxes[2].append([x_min, y_min, x_max, y_max])
+            if image_number == 4:
+                x_min += im1.width
+                x_max += im1.width
+                y_min += im1.height
+                y_max += im1.height
+                mosaic_bboxes[3].append([x_min, y_min, x_max, y_max])
+
+            # draw.rectangle([x_min, y_min, x_max, y_max], outline="red", width=1)
+
+        image_number += 1
+
+    # Resulting random crop is 300x300 in size
+    crop_y_min, crop_x_min, crop_height, crop_width = transforms.RandomCrop.get_params(mosaic, output_size=(300, 300))
+    crop_y_max = crop_y_min + crop_height
+    crop_x_max = crop_x_min + crop_width
+    cropped_mosaic = mosaic.crop((crop_x_min, crop_y_min, crop_x_max, crop_y_max))
+    # cropped_mosaic_draw = ImageDraw.Draw(cropped_mosaic)
+
+    final_bboxes = []
+    final_labels = []
+    for i, bboxes in enumerate(mosaic_bboxes):
+        bboxes_labels = annotations[i]['labels']
+        for j, bbox in enumerate(bboxes):
+            bbox_label = bboxes_labels[j]
+            overlap_bbox = find_overlap_bbox(bbox, (crop_x_min, crop_y_min, crop_x_max, crop_y_max))
+            if overlap_bbox:
+                final_bboxes.append(overlap_bbox)
+                final_labels.append(1) # Bbox is valid, add label
+                # print("overlap",overlap_bbox)
+                # print("crop", crop_x_min, crop_y_min, crop_x_max, crop_y_max)
+                # cropped_mosaic_draw.rectangle(overlap_bbox, outline='red', width=1)
+
+    # If there are no detections in the cropped image, then set the label to background, and insert dummy bbox
+    if len(final_bboxes) == 0:
+        final_bboxes = [[0, 0, 1, 1]]
+        final_labels = [0]
+
+    final_annotations = {
+        "image_id": torch.tensor(idx, dtype=torch.int64),
+        "boxes": torch.tensor(final_bboxes, dtype=torch.float),
+        "labels": torch.tensor(final_labels, dtype=torch.int64)
+    }
+
+    #cropped_mosaic.show()
+
+    return cropped_mosaic, final_annotations
 
 
 class Resize:
@@ -25,7 +181,7 @@ class Resize:
     def __call__(self, sample):
         """
 
-        :param sample: A dictionary containing the image, and the annotations. Annotations is a dictionary containing
+        :param sample: A dictionary containing the PIL image, and the annotations. Annotations is a dictionary containing
             image_id, boxes, labels.
         :return: A dictionary with resized image and annotation boxes.
         """
@@ -33,7 +189,7 @@ class Resize:
         image, annotations = sample["image"], sample["annotations"]
         bboxes = annotations['boxes']
 
-        h, w = image.size  # Original image size
+        w,h = image.size  # Original image size
         scale_x = self.size[1] / w
         scale_y = self.size[0] / h
 
@@ -43,14 +199,24 @@ class Resize:
 
         resize_image = transforms.Resize(self.size)
         resized_image = resize_image(image)
-        if bboxes.dim() != 1: # Check for images that have no detections (background) and therefore no bboxes
-            # Update annotations to reflect the resized image
-            bboxes[:, [0, 2]] *= scale_x  # Scale x_min and x_max
-            bboxes[:, [1, 3]] *= scale_y  # Scale y_min and y_max
 
-        sample = {"image": resized_image, "annotations": annotations, }
-        return sample
+        if isinstance(bboxes, torch.Tensor):
+            if bboxes.dim() != 1: # Skip images that have no license detections (background)
+                # Update annotations to reflect the resized image
+                bboxes[:, [0, 2]] *= scale_x  # Scale x_min and x_max
+                bboxes[:, [1, 3]] *= scale_y  # Scale y_min and y_max
 
+            sample = {"image": resized_image, "annotations": annotations, }
+            return sample
+        else:
+            for bbox in bboxes:
+                if bbox != [0, 0, 1, 1]:
+                    bbox[0] *= scale_x
+                    bbox[2] *= scale_x
+                    bbox[1] *= scale_y
+                    bbox[3] *= scale_y
+            sample = {"image": resized_image, "annotations": annotations, }
+            return sample
 
 class ToTensor:
     """ Converts PIL image into tensor. """
@@ -109,9 +275,30 @@ def extract_ordered_labels(images_root, annotations_root):
 
     return images, annotations
 
+def get_PIL_image(image_root_path, image_file_path, idx):
+    image_path = os.path.join(image_root_path, image_file_path[idx])
+    return Image.open(image_path)
+
+def get_matching_annotations(annotations_root_path, annotations_file_path, idx, image_height, image_width):
+    file_path = os.path.join(annotations_root_path, annotations_file_path[idx])
+    f = open(file_path, 'r')
+    lines = f.readlines()
+
+    # Bounding boxes
+    bboxes = [reformat_bbox(line.split(" ")[1:], image_height, image_width) for line in lines]
+
+    # Labels
+    if len(bboxes) == 0:
+        labels = [0]  # If no bboxes are found, make the image a background class image (0)
+        bboxes = [[0, 0, 1, 1]]  # Create a small bbox for background image
+    else:
+        labels = [int(line.split(" ")[0]) + 1 for line in lines]
+
+    f.close()
+    return bboxes, labels
 
 class AnprYoloDataset(Dataset):
-    def __init__(self, annotations_root, images_root, transform=None):
+    def __init__(self, annotations_root, images_root, transform=None, mosaic=False):
         """
 
         :param annotations_root: Image annotations.
@@ -125,7 +312,7 @@ class AnprYoloDataset(Dataset):
         images_list, annotations_list = extract_ordered_labels(self.images_root, self.annotations_root)
         self.image_files = images_list
         self.annotations_files = annotations_list
-
+        self.mosaic = mosaic
 
     def __len__(self):
         return len(self.annotations_files)
@@ -136,24 +323,51 @@ class AnprYoloDataset(Dataset):
         :param idx: (Int) Idx is equal to the image_id.
         :return: (Tuple), image and annotations. Annotations is a dictionary containing image_id, boxes, and labels.
         """
+        generate_mosaic = False
+
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        #print(idx)
+        if self.mosaic:
+            mosaic_true_prob = config.TRAIN_MOSAIC_PROBABILITY
+            mosaic_false_prob = 1 - mosaic_true_prob
+            generate_mosaic = choices([True, False], weights=[mosaic_true_prob, mosaic_false_prob])[0]
 
-        image_path = os.path.join(self.images_root, self.image_files[idx])
-        image = Image.open(image_path)
-        image_height, image_width = image.size
+        if generate_mosaic:
+            print('mosaic')
+            annotations_list = []
 
-        file_path = os.path.join(self.annotations_root, self.annotations_files[idx])
-        f = open(file_path, 'r')
-        lines = f.readlines()
-        bboxes = [reformat_bbox(line.split(" ")[1:], image_height, image_width) for line in lines]
-        if len(bboxes) == 0:
-            labels = [0] # If no bboxes are found, make the image a background class image (0)
-            bboxes = [[0, 0, 1, 1]] # Create a small bbox for background image
-        else: labels = [int(line.split(" ")[0]) + 1 for line in lines]
-        f.close()
+            images = []
+            list_of_bboxes = []
+            list_of_labels = []
+            for i in range(4):
+                annotations = {"image_id": idx}
+                # Images
+                random_idx = randint(0, len(self.image_files) - 1)
+                image = get_PIL_image(self.images_root, self.image_files, random_idx)
+                image_width, image_height = image.size
+                images.append(image)
+
+                # Bboxes and labels
+                bboxes, labels = get_matching_annotations(self.annotations_root, self.annotations_files, random_idx, image_height, image_width)
+                annotations["boxes"] = bboxes
+                annotations["labels"] = labels
+                annotations_list.append(annotations)
+
+            mosaic, annotations = create_mosaic(images, annotations_list, idx)
+
+            sample = {"image": mosaic, "annotations": annotations}  # Combine, as compose only accepts 1 argument
+            if self.transform:
+                mosaic, annotations = self.transform(sample)  # Transformed sample
+
+            return mosaic, annotations
+
+        # Get image (with index=idx) file path, and convert to PIL image
+        image = get_PIL_image(self.images_root, self.image_files, idx)
+        image_width, image_height = image.size
+
+        # Get the matching annotation file path (index = idx) and reformat and store the bboxes and labels
+        bboxes, labels = get_matching_annotations(self.annotations_root, self.annotations_files, idx, image_height, image_width)
 
         annotations = {
             # Needs to be dtype int64 otherwise model throws error

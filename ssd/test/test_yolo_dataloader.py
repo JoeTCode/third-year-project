@@ -2,7 +2,7 @@ from ssd.custom_yolo_dataset_loader import AnprYoloDataset, Resize, ToTensor
 from config import config
 from torch.utils.data import DataLoader
 from torchvision import transforms
-from PIL import Image
+from PIL import Image, ImageDraw
 import torch
 
 
@@ -72,7 +72,7 @@ train_dataloader = DataLoader(
     anpr_yolo_dataset, batch_size=1, shuffle=True, num_workers=0, collate_fn=collate_fn
 )
 
-# In the form (image_tensor, {'image_id': tensor(1), 'boxes': tensor([[bbox], [bbox]), 'labels': tensor([1, 1])})
+# In the form (image_tensor, {'image_id': tensor(1), 'boxes': tensor([[bbox], [bbox]]), 'labels': tensor([1, 1])})
 image_tensor1, annotations1 = anpr_yolo_dataset[0]
 image_tensor2, annotations2 = anpr_yolo_dataset[1]
 image_tensor3, annotations3 = anpr_yolo_dataset[2]
@@ -83,11 +83,20 @@ pil2 = transforms.ToPILImage()(image_tensor2)
 pil3 = transforms.ToPILImage()(image_tensor3)
 pil4 = transforms.ToPILImage()(image_tensor4)
 
+# mosaic, annotations = stitch([pil1, pil2, pil3, pil4], [annotations1, annotations2, annotations3, annotations4])
+# mosaic.show()
+# print(annotations)
 
+if __name__ == '__main__':
+    mosaic_test_dataset = AnprYoloDataset(
+            annotations_root=config.TRAIN_ANNOTATIONS_ROOT,
+            images_root=config.TRAIN_IMAGES_ROOT,
+            transform=transform,
+            mosaic=True # will generate mosaics (at a pre-set probability - in config)
+        )
 
-
-
-# for i_batch, sample_batched in enumerate(train_dataloader):
-#     img_batch, annotations_batch = sample_batched
-#     print(img_batch[0])
-#     break
+    for i, sample in enumerate(mosaic_test_dataset):
+        image, annotations = sample
+        print(image, annotations)
+        if i == 6:
+            break

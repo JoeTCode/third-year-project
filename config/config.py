@@ -15,3 +15,4 @@ VALID_ANNOTATIONS_ROOT = "/Users/joe/Desktop/eu-dataset/valid/labels"
 VERBOSE = False
 SAVE_IMAGE_DIRECTORY = "/Users/joe/Code/third-year-project/ANPR/ssd/prediction_images"
 FONT_SIZE=20
+TRAIN_MOSAIC_PROBABILITY = 0.5

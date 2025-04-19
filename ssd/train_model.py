@@ -60,7 +60,8 @@ transform = transforms.Compose([
 train_dataset = AnprYoloDataset(
     annotations_root=config.TRAIN_ANNOTATIONS_ROOT,
     images_root=config.TRAIN_IMAGES_ROOT,
-    transform=transform
+    transform=transform,
+    mosaic=True
 )
 
 valid_dataset = AnprYoloDataset(
