@@ -334,7 +334,6 @@ class AnprYoloDataset(Dataset):
             generate_mosaic = choices([True, False], weights=[mosaic_true_prob, mosaic_false_prob])[0]
 
         if generate_mosaic:
-            print('mosaic')
             annotations_list = []
 
             images = []

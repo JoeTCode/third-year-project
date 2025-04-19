@@ -10,7 +10,11 @@ import torch
 from config import config
 
 # Initialise EasyOCR reader
-reader = easyocr.Reader(['en'], gpu=False)
+gpu = False
+device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+if device.type == 'cuda':
+    gpu = True
+reader = easyocr.Reader(['en'], gpu=gpu)
 
 def crop_numberplate(pil_image, bbox):
     x_min, y_min, x_max, y_max = bbox
@@ -43,7 +47,7 @@ def resize_image_maintain_aspect_ratio(image, new_width=None, new_height=None, H
     return resized_image
 
 
-def map_bbox_to_image(batch_images, batch_target_bboxes, batch_predicted_bboxes, batch_scores, save_directory):
+def map_bbox_to_image(batch_images, batch_target_bboxes, batch_predicted_bboxes, batch_scores, save_directory, save=True):
     for i, image in enumerate(batch_images):
         image = transforms.ToPILImage()(image)  # Convert from tensor to PIL image for visualization
         draw = ImageDraw.Draw(image)
@@ -93,7 +97,7 @@ def map_bbox_to_image(batch_images, batch_target_bboxes, batch_predicted_bboxes,
 
                 # Perform OCR on license plate and extract text
                 detections = reader.readtext(np_img)
-                print(detections)
+                #print(detections)
                 license_plate_text = ''
 
                 for detection in detections:
@@ -123,7 +127,7 @@ def map_bbox_to_image(batch_images, batch_target_bboxes, batch_predicted_bboxes,
                 # Draws the predicted bounding box outline in red
                 draw.rectangle([x_min, y_min, x_max, y_max], outline="red", width=1)
 
-        else: print(f'{i} - SKIP')
+        #else: print(f'{i} - SKIP')
 
         # Draw target (actual) bbox in green
         for i in range(target_bboxes.shape[0]):
@@ -133,8 +137,9 @@ def map_bbox_to_image(batch_images, batch_target_bboxes, batch_predicted_bboxes,
         # Show image
         if not config.HPC:
             image.show()
-        timestamp = time.time()
-        if len(nms_predicted_bboxes) == 0:
-            timestamp = 'SKIP_' + str(timestamp)
-        filepath = os.path.join(save_directory, f'{timestamp}.png')
-        image.save(filepath)
+        if save:
+            timestamp = time.time()
+            if len(nms_predicted_bboxes) == 0:
+                timestamp = 'SKIP_' + str(timestamp)
+            filepath = os.path.join(save_directory, f'{timestamp}.png')
+            image.save(filepath)

@@ -11,7 +11,7 @@ import easyocr
 model = YOLO("./weights/run9_best.pt") # pretrained
 
 # Initialise EasyOCR reader
-reader = easyocr.Reader(['en'], gpu=False)
+reader = easyocr.Reader(['en'], gpu=config.HPC)
 
 
 def reformat_bbox(bbox, image_height, image_width):

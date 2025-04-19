@@ -215,24 +215,9 @@ for epoch in range(config.EPOCHS):
 
             # Generate image only when the eval is at its last batch
             if i_batch == len(valid_dataloader) - 1:
-                predicted_bboxes = predictions[0]['boxes']
-                predicted_scores = predictions[0]['scores']
-
-                # Apply Non-Maximum Suppression to bboxes.
-                # This eliminates lower confidence score boxes that overlap multiple other bboxes,
-                # reducing the amount of redundant predictions.
-                #print(predicted_scores)
-                score_threshold = 0.5
-                thresholded_score_mask = predicted_scores > score_threshold
-                #print(thresholded_score_mask)
-                keep_indices = nms(predicted_bboxes[thresholded_score_mask], predicted_scores[thresholded_score_mask], iou_threshold=0.5)
-                #print(keep_indices)
-                nms_predicted_bboxes = predicted_bboxes[keep_indices]
-                nms_predicted_scores = predicted_scores[keep_indices]
-
                 # Generate and store visualised predictions
-                map_bbox_to_image(images[0], annotations[0]['boxes'], nms_predicted_bboxes, nms_predicted_scores,
-                                  config.SAVE_IMAGE_DIRECTORY)
+                map_bbox_to_image(images, targets, predictions, predictions,
+                                  config.SAVE_IMAGE_DIRECTORY, save=False)
 
         # Compute final mAP over all batches
         metrics = metric.compute()
