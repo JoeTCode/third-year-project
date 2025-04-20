@@ -46,34 +46,61 @@ def resize_image_maintain_aspect_ratio(image, new_width=None, new_height=None, H
     else: resized_image = image.resize((new_width, new_height), Image.ANTIALIAS)
     return resized_image
 
+def filter_model_predictions(predicted_bboxes, predicted_scores, predicted_labels, bbox_score_threshold=0.4, iou_threshold=0.5):
+    """
 
-def map_bbox_to_image(batch_images, batch_target_bboxes, batch_predicted_bboxes, batch_scores, save_directory, save=True):
+    :param predicted_bboxes: Takes a list of SSD bbox predictions (predictions[i]['boxes']).
+    :param predicted_scores: Takes a list of SSD score predictions (predicted_scores = predictions[i]['scores']).
+    :param predicted_labels: Takes a list of SSD label predictions (target_bboxes = targets[i]['boxes']).
+    :param bbox_score_threshold: (float) Optional min confidence score value.
+    :param iou_threshold: (float) Optional IOU value.
+    :return: Returns lists of filtered bboxes, scores, and labels predictions.
+    """
+
+    # 2 steps: Confidence score threshold filter, then NMS filter.
+    # Filter out all bboxes that have confidence scores below the score threshold (NMS doesn't effectively get rid
+    # of all un-accurate bounding boxes, and there can be hundreds of detections per image)
+    score_confidence_mask = predicted_scores > bbox_score_threshold  # true false array
+    bboxes = predicted_bboxes[score_confidence_mask]
+    scores = predicted_scores[score_confidence_mask]
+    labels = predicted_labels[score_confidence_mask]
+
+    # Apply Non-Maximum Suppression to bboxes. This eliminates lower confidence score boxes that overlap multiple
+    # other bboxes, reducing the amount of redundant predictions.
+    keep_indices = nms(bboxes, scores, iou_threshold=iou_threshold)
+    return bboxes[keep_indices], scores[keep_indices], labels[keep_indices]
+
+def map_bbox_to_image(batch_images, targets, predictions, save_directory, save=True):
+    """
+
+    :param batch_images: A list of torch tensor images.
+    :param targets: A list of annotation dictionaries.
+    :param predictions:
+        A list of prediction dictionaries (one per image) containing predicted bboxes, scores, and labels in the form
+        [{
+            'boxes': Tensor[N, 4],       # predicted bounding boxes
+            'labels': Tensor[N],         # predicted class labels
+            'scores': Tensor[N]          # confidence scores for each prediction
+        }, ...]
+    :param save_directory:
+    :param save:
+    :return:
+    """
     for i, image in enumerate(batch_images):
         image = transforms.ToPILImage()(image)  # Convert from tensor to PIL image for visualization
         draw = ImageDraw.Draw(image)
 
-        predicted_bboxes = batch_predicted_bboxes[i]['boxes']
-        predicted_scores = batch_scores[i]['scores']
-        target_bboxes = batch_target_bboxes[i]['boxes']
+        predicted_bboxes = predictions[i]['boxes']
+        predicted_scores = predictions[i]['scores']
+        predicted_labels = predictions[i]['labels']
+        target_bboxes = targets[i]['boxes']
 
-        # Filter out all bboxes that have confidence scores below the score threshold (NMS doesn't effectively get rid
-        # of all un-accurate bounding boxes, and there can be hundreds of detections per image)
-        bbox_score_threshold = 0.4
-        score_confidence_mask = predicted_scores > bbox_score_threshold
-        masked_predicted_bboxes = predicted_bboxes[score_confidence_mask]
-        masked_predicted_scores = predicted_scores[score_confidence_mask]
+        filtered_bboxes, filtered_scores, filtered_labels = filter_model_predictions(predicted_bboxes, predicted_scores, predicted_labels, target_bboxes)
 
-        # Apply Non-Maximum Suppression to bboxes. This eliminates lower confidence score boxes that overlap multiple
-        # other bboxes, reducing the amount of redundant predictions.
-        keep_indices = nms(masked_predicted_bboxes, masked_predicted_scores,
-                           iou_threshold=0.5)
-        nms_predicted_bboxes = masked_predicted_bboxes[keep_indices]
-        nms_predicted_scores = masked_predicted_scores[keep_indices]
-
-        if len(nms_predicted_bboxes) != 0:
+        if len(filtered_bboxes) != 0:
             # Draw predicted bboxes in red
-            for j, nms_predicted_bboxes in enumerate(nms_predicted_bboxes):
-                x_min, y_min, x_max, y_max = predicted_bboxes[j]
+            for j, nms_bbox in enumerate(filtered_bboxes):
+                x_min, y_min, x_max, y_max = nms_bbox
 
                 # Read the license plate text
                 cropped_image = crop_numberplate(image, predicted_bboxes[j])
@@ -106,7 +133,7 @@ def map_bbox_to_image(batch_images, batch_target_bboxes, batch_predicted_bboxes,
                     license_plate_text = 'NaN'
 
                 # Gets score for bounding box in the desired format.
-                text = str(round(nms_predicted_scores[j].item(), 2))
+                text = str(round(filtered_scores[j].item(), 2))
                 text += '    '
                 text += license_plate_text
 
@@ -139,7 +166,7 @@ def map_bbox_to_image(batch_images, batch_target_bboxes, batch_predicted_bboxes,
             image.show()
         if save:
             timestamp = time.time()
-            if len(nms_predicted_bboxes) == 0:
+            if len(filtered_bboxes) == 0:
                 timestamp = 'SKIP_' + str(timestamp)
             filepath = os.path.join(save_directory, f'{timestamp}.png')
             image.save(filepath)

@@ -87,6 +87,9 @@ pil4 = transforms.ToPILImage()(image_tensor4)
 # mosaic.show()
 # print(annotations)
 
+
+
+
 if __name__ == '__main__':
     mosaic_test_dataset = AnprYoloDataset(
             annotations_root=config.TRAIN_ANNOTATIONS_ROOT,
@@ -98,7 +101,6 @@ if __name__ == '__main__':
     for i, sample in enumerate(mosaic_test_dataset):
         image, annotations = sample
         pil = transforms.ToPILImage()(image)
-        pil.show()
-        print(annotations)
-        if i == 0:
+        print(image)
+        if i == 1:
             break

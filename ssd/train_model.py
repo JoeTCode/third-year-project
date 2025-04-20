@@ -3,9 +3,12 @@
 # credit to https://medium.com/@piyushkashyap045/transfer-learning-in-pytorch-fine-tuning-pretrained-models-for-custom-datasets-6737b03d6fa2#:~:text=limited%20hardware%20resources.-,Loading%20Pre%2DTrained%20Models%20in%20PyTorch,models%20module.
 # credit to https://pytorch.org/tutorials/beginner/data_loading_tutorial.html
 import time
+from itertools import zip_longest
+
 import torch
 import torch.optim as optim
 import torchvision
+from six import print_
 from torchvision import transforms
 from custom_yolo_dataset_loader import AnprYoloDataset, Resize, ToTensor
 from torch.utils.data import DataLoader
@@ -14,9 +17,62 @@ from torchvision.models.detection.ssd import SSDClassificationHead
 from torchvision.models.detection import _utils
 from config import config
 from torchmetrics.detection import MeanAveragePrecision
-from show_predictions import map_bbox_to_image
+from show_predictions import map_bbox_to_image, filter_model_predictions
 from torchvision.ops import nms
 import os
+
+def compute_confusion_counts(predicted_labels, target_labels):
+    """
+
+    :param predicted_labels:
+        Takes a 1d list of predicted labels. Predicted labels length can be equal to, larger than, or less than target
+        labels due to the nature of the filtering.
+    :param target_labels: Takes a 1d list of target labels
+    :return:
+    """
+    TP, FP, TN, FN, = 0, 0, 0, 0
+
+    # Convert to lists if tensors
+    if isinstance(predicted_labels, torch.Tensor):
+        predicted_labels = predicted_labels.tolist()
+    if isinstance(target_labels, torch.Tensor):
+        target_labels = target_labels.tolist()
+
+    assert len(target_labels) > 0, "Invalid target labels"
+
+    if len(predicted_labels) == 0:
+        return {"TP": TP, "FP": FP, "TN": TN, "FN": FN}
+
+    # Don't need to check if len(pred) < len(target)
+    for pred, target in zip_longest(predicted_labels, target_labels, fillvalue=-1):
+        if pred == -1: # If predictions is shorter
+            FN += 1
+            continue
+        if target == -1: # If target is shorter
+            FP += 1
+            continue
+
+        if pred == target == 1:
+            TP += 1
+        elif pred == target == 0:
+            TN += 1
+        elif pred != target:
+            if pred == 1 and target == 0:
+                FP += 1
+            else:  # pred == 0 and target == 1
+                FN += 1
+
+    return {"TP": TP, "FP": FP, "TN": TN, "FN": FN}
+
+def print_confusion_matrix(TP, TN, FP, FN, pretty_print=False):
+    total = TP + TN + FP + FN
+    if pretty_print:
+        print("\nConfusion Matrix:")
+        print(f"{'':<18}{'Predicted: LP (1)':<20}{'Predicted: BG (0)'}")
+        print(f"{'Target: LP (1)':<25}{TP:<21}{FN}")
+        print(f"{'Target: BG (0)':<25}{FP:<21}{TN}")
+    else: print(f"TP: {TP}, TN: {TN}, FP: {FP}, FN: {FN} - Total = {total}")
+
 
 if config.HPC: SAVE_CHECKPOINTS_DIRECTORY = '/gpfs/home/hyg22ktu/train-ssd/ssd-weights'
 else: SAVE_CHECKPOINTS_DIRECTORY = './ssd_weights'
@@ -132,6 +188,10 @@ if log_interval == 0:  # Prevents modulo error if total_steps < NUM_LOGS meaning
     log_interval = 1
 
 for epoch in range(config.EPOCHS):
+    total_images = 0
+    total_targets = 0
+    total_preds = 0
+    TP, FP, TN, FN = 0, 0, 0, 0
 
     start_time_for_epoch = time.time()
     total_epoch_loss = 0
@@ -213,11 +273,31 @@ for epoch in range(config.EPOCHS):
             predictions = model(images)
             metric.update(predictions, targets)
 
-            # Generate image only when the eval is at its last batch
-            if i_batch == len(valid_dataloader) - 1:
-                # Generate and store visualised predictions
-                map_bbox_to_image(images, targets, predictions, predictions,
-                                  config.SAVE_IMAGE_DIRECTORY, save=False)
+            for i, image in enumerate(images):
+                predicted_bboxes = predictions[i]['boxes']
+                predicted_scores = predictions[i]['scores']
+                predicted_labels = predictions[i]['labels']
+                target_bboxes = targets[i]['boxes']
+                target_labels = targets[i]['labels']
+
+                total_images += len(images)
+                total_targets += len(target_labels)
+                total_preds += len(predicted_labels)
+
+                filtered_bboxes, filtered_scores, filtered_labels = filter_model_predictions(predicted_bboxes, predicted_scores, predicted_labels)
+                count_dict = compute_confusion_counts(filtered_labels, target_labels)
+
+                TP += count_dict['TP']
+                TN += count_dict['TN']
+                FP += count_dict['FP']
+                FN += count_dict['FN']
+
+            if not config.HPC:
+                # Generate image only when the eval is at its last batch
+                if i_batch == len(valid_dataloader) - 1:
+                    # Generate and store visualised predictions
+                    map_bbox_to_image(images, targets, predictions,
+                                      config.SAVE_IMAGE_DIRECTORY, save=False)
 
         # Compute final mAP over all batches
         metrics = metric.compute()
@@ -227,6 +307,7 @@ for epoch in range(config.EPOCHS):
               f'  mAP-50: {map_50:<4}'
               f'  mAP-75: {map_75:<4}'
               f'  time: {round(evaluation_time, 2)} s')
+        print_confusion_matrix(TP, TN, FP, FN)
 
         if map > best_map + config.MAP_MIN_DIFFERENCE:
             best_map = map

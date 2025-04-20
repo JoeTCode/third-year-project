@@ -101,7 +101,7 @@ for i_batch, sample_batched in enumerate(valid_dataloader):
     # pass predictions twice as we access boxes and scores from it\
 
     if i_batch % config.NUM_LOGS == 0:
-        map_bbox_to_image(images, targets, predictions, predictions,
+        map_bbox_to_image(images, targets, predictions,
                           config.SAVE_IMAGE_DIRECTORY)
 
 # Compute final mAP over all batches

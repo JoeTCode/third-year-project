@@ -79,9 +79,9 @@ annotations = {
     'boxes': bboxes,
     'labels': labels,
 }
-print(bboxes)
+
 pil = Image.open('mosaic-test.png')
 img = transforms.ToTensor()(pil)
 predictions = model([img])
-map_bbox_to_image([img], [annotations], predictions, predictions,
+map_bbox_to_image([img], [annotations], predictions,
                           config.SAVE_IMAGE_DIRECTORY, save=False)
