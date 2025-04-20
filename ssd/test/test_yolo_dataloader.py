@@ -97,6 +97,8 @@ if __name__ == '__main__':
 
     for i, sample in enumerate(mosaic_test_dataset):
         image, annotations = sample
-        print(image, annotations)
-        if i == 6:
+        pil = transforms.ToPILImage()(image)
+        pil.show()
+        print(annotations)
+        if i == 0:
             break
