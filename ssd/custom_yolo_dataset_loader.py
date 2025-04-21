@@ -6,6 +6,9 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 from config import config
 from random import choices, randint
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
+import numpy as np
 
 image_files = [image for image in os.listdir(config.TRAIN_IMAGES_ROOT)]
 annotations_files = [annotation for annotation in os.listdir(config.TRAIN_ANNOTATIONS_ROOT)]
@@ -297,6 +300,37 @@ def get_matching_annotations(annotations_root_path, annotations_file_path, idx, 
     f.close()
     return bboxes, labels
 
+def apply_transform(image, annotations, transform):
+    """
+
+    :param image: One (PIL) image.
+    :param annotations: Corresponding annotation dict.
+    :param transform: Transform function (contains a series of transformations to be applied to the image and annotations).
+    :return: (Tuple) Transformed image and annotations.
+    """
+    np_image = np.array(image)
+    bboxes = annotations['boxes']
+    labels = annotations['labels']
+
+    if not isinstance(bboxes, list):
+        bboxes = bboxes.tolist()
+    if not isinstance(labels, list):
+        labels = labels.tolist()
+
+    augmented = transform(image=np_image, bboxes=bboxes, labels=labels)
+
+    # Extract the augmented results
+    image = augmented["image"]
+    bboxes = augmented["bboxes"]
+    labels = augmented["labels"]
+
+    # Update annotations with transformed values
+    annotations["boxes"] = torch.tensor(bboxes, dtype=torch.float32)
+    annotations["labels"] = torch.tensor(labels, dtype=torch.int64)
+
+    return image, annotations
+
+
 class AnprYoloDataset(Dataset):
     def __init__(self, annotations_root, images_root, transform=None, mosaic=False):
         """
@@ -357,7 +391,12 @@ class AnprYoloDataset(Dataset):
 
             sample = {"image": mosaic, "annotations": annotations}  # Combine, as compose only accepts 1 argument
             if self.transform:
-                mosaic, annotations = self.transform(sample)  # Transformed sample
+                # mosaic, annotations = self.transform(sample)  # Transformed sample
+                mosaic, annotations = apply_transform(sample['image'], sample['annotations'], self.transform)
+
+            if annotations['boxes'].shape[0] == 0:  # If target boxes are empty (after transform) set as background
+                annotations['boxes'] = torch.tensor([[0, 0, 1, 1]], dtype=torch.float)
+                annotations['labels'] = torch.tensor([0], dtype=torch.int64)
 
             return mosaic, annotations
 
@@ -377,24 +416,63 @@ class AnprYoloDataset(Dataset):
 
         # If necessary, perform transforms (e.g., resize, normalize) using custom transform
         sample = {"image": image, "annotations": annotations}  # Combine, as compose only accepts 1 argument
-        if self.transform:
-            image, annotations = self.transform(sample)  # Transformed sample
+
+        # if self.transform: # torchvision transform
+        #     image, annotations = self.transform(sample)  # Transformed sample
+
+        if self.transform: # Albumetations transform
+            image, annotations = apply_transform(image, annotations, self.transform)
+
+        if annotations['boxes'].shape[0] == 0: # If target boxes are empty (after transform) set as background
+            annotations['boxes'] = torch.tensor([[0, 0, 1, 1]], dtype=torch.float)
+            annotations['labels'] = torch.tensor([0], dtype=torch.int64)
 
         return image, annotations
 
 
-transform = transforms.Compose([
-    Resize((300, 300)),
-    ToTensor(),
-    # Image net normalisation
-    transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                         std=[0.229, 0.224, 0.225])
-])
+# transform = transforms.Compose([
+#     Resize((300, 300)),
+#     ToTensor(),
+#     # Image net normalisation
+#     transforms.Normalize(mean=[0.485, 0.456, 0.406],
+#                          std=[0.229, 0.224, 0.225]),
+#     transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2)
+# ])
+
+train_transform = A.Compose(
+    [
+        A.RandomBrightnessContrast(p=0.3),
+        A.HorizontalFlip(p=0.5),
+        A.ShiftScaleRotate(shift_limit=0.05, scale_limit=0.05, rotate_limit=5, p=0.5),
+        A.MotionBlur(blur_limit=3, p=0.2),
+        A.Resize(300, 300),
+        A.Normalize(),
+        ToTensorV2()
+    ],
+    bbox_params=A.BboxParams(
+        format='pascal_voc',
+        label_fields=['labels'], # name (key) corresponding to the labels list
+        min_visibility=0.1
+    )
+)
+
+validation_transform = A.Compose(
+    [
+        A.Resize(300, 300),
+        A.Normalize(),
+        ToTensorV2()
+    ],
+    bbox_params=A.BboxParams(
+        format='pascal_voc',
+        label_fields=['labels'], # name (key) corresponding to the labels list
+        min_visibility=0.1
+    )
+)
 
 anpr_yolo_dataset = AnprYoloDataset(
         annotations_root=config.TRAIN_ANNOTATIONS_ROOT,
         images_root=config.TRAIN_IMAGES_ROOT,
-        transform=transform
+        transform=train_transform
     )
 
 def collate_fn(batch):

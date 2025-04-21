@@ -1,4 +1,4 @@
-from ssd.custom_yolo_dataset_loader import AnprYoloDataset, Resize, ToTensor
+from ssd.custom_yolo_dataset_loader import AnprYoloDataset, Resize, ToTensor, train_transform
 from config import config
 from torch.utils.data import DataLoader
 from torchvision import transforms
@@ -6,15 +6,15 @@ from PIL import Image, ImageDraw
 import torch
 
 
-transform = transforms.Compose([
-    Resize((300, 300)),
-    ToTensor()
-])
+# transform = transforms.Compose([
+#     Resize((300, 300)),
+#     ToTensor()
+# ])
 
 anpr_yolo_dataset = AnprYoloDataset(
         annotations_root=config.TRAIN_ANNOTATIONS_ROOT,
         images_root=config.TRAIN_IMAGES_ROOT,
-        transform=transform
+        transform=train_transform
     )
 
 
@@ -68,39 +68,50 @@ def test_yolo_dataloader(end_test, image_shape, has_background_images, drop_last
 #test_yolo_dataloader(5, (3, 300, 300), False, True)
 
 
-train_dataloader = DataLoader(
-    anpr_yolo_dataset, batch_size=1, shuffle=True, num_workers=0, collate_fn=collate_fn
-)
-
-# In the form (image_tensor, {'image_id': tensor(1), 'boxes': tensor([[bbox], [bbox]]), 'labels': tensor([1, 1])})
-image_tensor1, annotations1 = anpr_yolo_dataset[0]
-image_tensor2, annotations2 = anpr_yolo_dataset[1]
-image_tensor3, annotations3 = anpr_yolo_dataset[2]
-image_tensor4, annotations4 = anpr_yolo_dataset[3]
-
-pil1 = transforms.ToPILImage()(image_tensor1)
-pil2 = transforms.ToPILImage()(image_tensor2)
-pil3 = transforms.ToPILImage()(image_tensor3)
-pil4 = transforms.ToPILImage()(image_tensor4)
-
-# mosaic, annotations = stitch([pil1, pil2, pil3, pil4], [annotations1, annotations2, annotations3, annotations4])
-# mosaic.show()
-# print(annotations)
-
-
 
 
 if __name__ == '__main__':
-    mosaic_test_dataset = AnprYoloDataset(
+    # mosaic_test_dataset = AnprYoloDataset(
+    #         annotations_root=config.TRAIN_ANNOTATIONS_ROOT,
+    #         images_root=config.TRAIN_IMAGES_ROOT,
+    #         transform=transform,
+    #         mosaic=True # will generate mosaics (at a pre-set probability - in config)
+    #     )
+    #
+    # for i, sample in enumerate(mosaic_test_dataset):
+    #     image, annotations = sample
+    #     pil = transforms.ToPILImage()(image)
+    #     print(image)
+    #     if i == 1:
+    #         break
+
+    test_dataset = AnprYoloDataset(
             annotations_root=config.TRAIN_ANNOTATIONS_ROOT,
             images_root=config.TRAIN_IMAGES_ROOT,
-            transform=transform,
-            mosaic=True # will generate mosaics (at a pre-set probability - in config)
+            transform=train_transform,
+            mosaic=True
         )
 
-    for i, sample in enumerate(mosaic_test_dataset):
+    train_dataset_batch_size_1 = DataLoader(
+        test_dataset, batch_size=1, shuffle=True, num_workers=0, collate_fn=collate_fn
+    )
+
+    for i, sample in enumerate(train_dataset_batch_size_1):
         image, annotations = sample
-        pil = transforms.ToPILImage()(image)
-        print(image)
-        if i == 1:
+        # pil = transforms.ToPILImage()(image)
+        # draw = ImageDraw.Draw(pil)
+        # bboxes = annotations['boxes']
+
+        if annotations[0]['boxes'].shape[0] == 0:
+            print(image)
+            pil = transforms.ToPILImage()(image[0])
+            pil.show()
+            print(annotations)
             break
+
+        # for bbox in bboxes:
+        #     x_min, y_min, x_max, y_max = bbox
+        #     # Draws the predicted bounding box outline in red
+        #     draw.rectangle([x_min, y_min, x_max, y_max], outline="red", width=1)
+        # pil.show()
+

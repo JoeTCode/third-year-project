@@ -2,7 +2,7 @@ import time
 import torch
 import torchvision
 from torchvision import transforms
-from ssd.custom_yolo_dataset_loader import AnprYoloDataset, Resize, ToTensor
+from ssd.custom_yolo_dataset_loader import AnprYoloDataset, Resize, ToTensor, train_transform, validation_transform
 from torch.utils.data import DataLoader
 from torchvision.models.detection.ssd import SSD300_VGG16_Weights
 from torchvision.models.detection.ssd import SSDClassificationHead
@@ -24,8 +24,16 @@ transform = transforms.Compose([
 valid_dataset = AnprYoloDataset(
     annotations_root=config.VALID_ANNOTATIONS_ROOT,
     images_root=config.VALID_IMAGES_ROOT,
-    transform=transform
+    transform=validation_transform
 )
+
+train_dataset = AnprYoloDataset(
+    annotations_root=config.VALID_ANNOTATIONS_ROOT,
+    images_root=config.VALID_IMAGES_ROOT,
+    transform=train_transform,
+    mosaic=True
+)
+
 
 def collate_fn(batch):
     images = []
@@ -46,6 +54,9 @@ if config.HPC:
 else:
     valid_dataloader = DataLoader(
         valid_dataset, batch_size=config.BATCH_SIZE, shuffle=False, num_workers=0, collate_fn=collate_fn
+    )
+    train_dataloader = DataLoader(
+        train_dataset, batch_size=config.BATCH_SIZE, shuffle=False, num_workers=0, collate_fn=collate_fn
     )
 
 # Load the model with pretrained weights
@@ -70,18 +81,24 @@ model.head.classification_head = SSDClassificationHead(
 model = model.to(device)
 
 model.eval()
-image_id = torch.tensor(0, dtype=torch.int64)
-bboxes = torch.tensor([[ 22.5312, 143.1797, 111.1250, 200.1328]], dtype=torch.float32)
-labels = torch.tensor([1], dtype=torch.int64)
-bboxes.to(device)
-labels.to(device)
-annotations = {
-    'boxes': bboxes,
-    'labels': labels,
-}
+# image_id = torch.tensor(0, dtype=torch.int64)
+# bboxes = torch.tensor([[ 22.5312, 143.1797, 111.1250, 200.1328]], dtype=torch.float32)
+# labels = torch.tensor([1], dtype=torch.int64)
+# bboxes.to(device)
+# labels.to(device)
+# annotations = {
+#     'boxes': bboxes,
+#     'labels': labels,
+# }
 
-pil = Image.open('mosaic-test.png')
-img = transforms.ToTensor()(pil)
-predictions = model([img])
-map_bbox_to_image([img], [annotations], predictions,
-                          config.SAVE_IMAGE_DIRECTORY, save=False)
+# pil = Image.open('mosaic-test.png')
+# img = transforms.ToTensor()(pil)
+# predictions = model([img])
+
+for i, sample in enumerate(train_dataloader):
+    images = sample[0];
+    annotations = sample[1]
+    loss_dict = model(images, annotations)
+    if i == 1:
+        print(loss_dict)
+        break

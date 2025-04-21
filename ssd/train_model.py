@@ -4,13 +4,11 @@
 # credit to https://pytorch.org/tutorials/beginner/data_loading_tutorial.html
 import time
 from itertools import zip_longest
-
 import torch
 import torch.optim as optim
 import torchvision
-from six import print_
 from torchvision import transforms
-from custom_yolo_dataset_loader import AnprYoloDataset, Resize, ToTensor
+from custom_yolo_dataset_loader import AnprYoloDataset, Resize, ToTensor, train_transform, validation_transform
 from torch.utils.data import DataLoader
 from torchvision.models.detection.ssd import SSD300_VGG16_Weights
 from torchvision.models.detection.ssd import SSDClassificationHead
@@ -107,23 +105,23 @@ if torch.cuda.is_available():
 else:
     print('Device used:', device)
 
-# Perform transformations using transforms function
-transform = transforms.Compose([
-    Resize((300, 300)),
-    ToTensor()
-])
+# # Perform transformations using transforms function
+# transform = transforms.Compose([
+#     Resize((300, 300)),
+#     ToTensor()
+# ])
 
 train_dataset = AnprYoloDataset(
     annotations_root=config.TRAIN_ANNOTATIONS_ROOT,
     images_root=config.TRAIN_IMAGES_ROOT,
-    transform=transform,
+    transform=train_transform,
     mosaic=True
 )
 
 valid_dataset = AnprYoloDataset(
     annotations_root=config.VALID_ANNOTATIONS_ROOT,
     images_root=config.VALID_IMAGES_ROOT,
-    transform=transform
+    transform=validation_transform
 )
 
 

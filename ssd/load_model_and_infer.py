@@ -2,7 +2,7 @@ import time
 import torch
 import torchvision
 from torchvision import transforms
-from custom_yolo_dataset_loader import AnprYoloDataset, Resize, ToTensor
+from custom_yolo_dataset_loader import AnprYoloDataset, Resize, ToTensor, validation_transform
 from torch.utils.data import DataLoader
 from torchvision.models.detection.ssd import SSD300_VGG16_Weights
 from torchvision.models.detection.ssd import SSDClassificationHead
@@ -15,15 +15,15 @@ from show_predictions import map_bbox_to_image
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 # Perform transformations using transforms function
-transform = transforms.Compose([
-    Resize((300, 300)),
-    ToTensor()
-])
+# transform = transforms.Compose([
+#     Resize((300, 300)),
+#     ToTensor()
+# ])
 
 valid_dataset = AnprYoloDataset(
     annotations_root=config.VALID_ANNOTATIONS_ROOT,
     images_root=config.VALID_IMAGES_ROOT,
-    transform=transform
+    transform=validation_transform
 )
 
 def collate_fn(batch):
