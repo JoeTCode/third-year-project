@@ -70,11 +70,46 @@ def filter_model_predictions(predicted_bboxes, predicted_scores, predicted_label
     keep_indices = nms(bboxes, scores, iou_threshold=iou_threshold)
     return bboxes[keep_indices], scores[keep_indices], labels[keep_indices]
 
-def map_bbox_to_image(batch_images, targets, predictions, save_directory, save=True):
+def preprocess_image(image, bbox=None, crop_size=None):
+    """
+    Takes a PIL image and bbox, and preprocesses the image.
+    :param crop_size: (Optional) (tuple) In the form (width, height).
+    :param image: PIL image.
+    :param bbox: (Optional) A bbox.
+    :return: A processed image converted to a numpy array.
+    """
+
+
+    resized_image = image
+
+    if crop_size is not None and bbox is not None:
+
+        cropped_image = crop_numberplate(image, bbox)
+
+        assert isinstance(crop_size, tuple), "Size argument needs to a tuple in the form (width, height)"
+        # Resize the cropped image (make larger)
+        resized_image = resize_image_maintain_aspect_ratio(cropped_image, new_width=crop_size[0], new_height=crop_size[1])
+
+
+    # Apply sharpening filter
+    sharpened_image = resized_image.filter(ImageFilter.SHARPEN)
+
+    # Convert image to from PIL to openCV
+    np_cropped_image = np.array(sharpened_image)
+
+    # Convert the image to grayscale
+    gray_image = cv2.cvtColor(np_cropped_image, cv2.COLOR_BGR2GRAY)
+    thresholded_image = cv2.adaptiveThreshold(
+        gray_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+    )
+
+    return np.array(thresholded_image)
+
+def map_bbox_to_image(batch_images, targets, predictions, save_directory, original_image_loader, resize, save=True):
     """
 
     :param batch_images: A list of torch tensor images.
-    :param targets: A list of annotation dictionaries.
+    :param targets: A list of annotation dictionaries. (WITH IMAGE_ID)
     :param predictions:
         A list of prediction dictionaries (one per image) containing predicted bboxes, scores, and labels in the form
         [{
@@ -88,39 +123,39 @@ def map_bbox_to_image(batch_images, targets, predictions, save_directory, save=T
     """
     for i, image in enumerate(batch_images):
         image = transforms.ToPILImage()(image)  # Convert from tensor to PIL image for visualization
-        draw = ImageDraw.Draw(image)
+
 
         predicted_bboxes = predictions[i]['boxes']
         predicted_scores = predictions[i]['scores']
         predicted_labels = predictions[i]['labels']
         target_bboxes = targets[i]['boxes']
+        target_id = targets[i]['image_id']
 
-        filtered_bboxes, filtered_scores, filtered_labels = filter_model_predictions(predicted_bboxes, predicted_scores, predicted_labels, target_bboxes)
+        original_image = original_image_loader[target_id]
+        draw = ImageDraw.Draw(original_image)
+
+        resized_target_dict = resize(original_image.size)({
+            "image": image,
+            "annotations": {"image_id": target_id, "boxes": target_bboxes, "labels": targets[i]['labels']}
+        })
+        resized_target_boxes = resized_target_dict['annotations']['boxes']
+
+
+
+        filtered_bboxes, filtered_scores, filtered_labels = filter_model_predictions(predicted_bboxes, predicted_scores, predicted_labels)
 
         if len(filtered_bboxes) != 0:
+            resized_to_original_dict = resize(original_image.size)({
+                "image": image,
+                "annotations": {"image_id": target_id, "boxes": filtered_bboxes, "labels": filtered_labels}
+            })
+            bboxes = resized_to_original_dict["annotations"]["boxes"]
             # Draw predicted bboxes in red
-            for j, nms_bbox in enumerate(filtered_bboxes):
+            for j, nms_bbox in enumerate(bboxes):
                 x_min, y_min, x_max, y_max = nms_bbox
 
-                # Read the license plate text
-                cropped_image = crop_numberplate(image, predicted_bboxes[j])
 
-                # Resize the cropped image (make larger)
-                resized_image = resize_image_maintain_aspect_ratio(cropped_image, new_width=200, new_height=200)
-
-                # Apply sharpening filter
-                sharpened_image = resized_image.filter(ImageFilter.SHARPEN)
-
-                # Convert image to from PIL to openCV
-                np_cropped_image = np.array(sharpened_image)
-                opencv_image = cv2.cvtColor(np_cropped_image, cv2.COLOR_RGB2BGR)
-
-                # Convert the image to grayscale
-                gray_image = cv2.cvtColor(opencv_image, cv2.COLOR_BGR2GRAY)
-                thresholded_image = cv2.adaptiveThreshold(
-                    gray_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
-                )
-                np_img = np.array(thresholded_image)
+                np_img = preprocess_image(original_image, nms_bbox, (200,200))
 
                 # Perform OCR on license plate and extract text
                 detections = reader.readtext(np_img)
@@ -157,13 +192,13 @@ def map_bbox_to_image(batch_images, targets, predictions, save_directory, save=T
         #else: print(f'{i} - SKIP')
 
         # Draw target (actual) bbox in green
-        for i in range(target_bboxes.shape[0]):
-            x_min, y_min, x_max, y_max = target_bboxes[i]
+        for i in range(resized_target_boxes.shape[0]):
+            x_min, y_min, x_max, y_max = resized_target_boxes[i]
             draw.rectangle([x_min, y_min, x_max, y_max], outline="green", width=1)
 
         # Show image
         if not config.HPC:
-            image.show()
+            original_image.show()
         if save:
             timestamp = time.time()
             if len(filtered_bboxes) == 0:

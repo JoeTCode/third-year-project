@@ -136,7 +136,6 @@ def collate_fn(batch):
     images = torch.stack(images, dim=0)  # Stack images into a batch
     return images, targets  # Targets remain as a list of dicts (not a tensor)
 
-
 # Use dataloader function load the dataset in the specified transformation.
 if config.HPC:
     train_dataloader = DataLoader(

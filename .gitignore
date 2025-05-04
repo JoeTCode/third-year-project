@@ -22,3 +22,7 @@ __pycache__/
 
 /yolov8n/runs/
 /yolov8n/weights/
+/frontend/static/input_images/
+/frontend/static/output_images/
+/frontend/static/output_images_steps/
+/ssd/ssd_weights/

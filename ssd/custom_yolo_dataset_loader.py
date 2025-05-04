@@ -184,8 +184,9 @@ class Resize:
     def __call__(self, sample):
         """
 
-        :param sample: A dictionary containing the PIL image, and the annotations. Annotations is a dictionary containing
-            image_id, boxes, labels.
+        :param sample:
+            A dictionary in the form {"image": image, "annotations": annotations} containing the PIL image,
+            and the annotations. Annotations is a dictionary containing image_id, boxes, labels.
         :return: A dictionary with resized image and annotation boxes.
         """
 
@@ -332,7 +333,7 @@ def apply_transform(image, annotations, transform):
 
 
 class AnprYoloDataset(Dataset):
-    def __init__(self, annotations_root, images_root, transform=None, mosaic=False):
+    def __init__(self, annotations_root, images_root, transform=None, mosaic=False, test=False):
         """
 
         :param annotations_root: Image annotations.
@@ -347,6 +348,7 @@ class AnprYoloDataset(Dataset):
         self.image_files = images_list
         self.annotations_files = annotations_list
         self.mosaic = mosaic
+        self.test = test
 
     def __len__(self):
         return len(self.annotations_files)
@@ -357,6 +359,10 @@ class AnprYoloDataset(Dataset):
         :param idx: (Int) Idx is equal to the image_id.
         :return: (Tuple), image and annotations. Annotations is a dictionary containing image_id, boxes, and labels.
         """
+
+        if self.test:
+            return get_PIL_image(self.images_root, self.image_files, idx)
+
         generate_mosaic = False
 
         if torch.is_tensor(idx):
@@ -460,6 +466,18 @@ validation_transform = A.Compose(
     [
         A.Resize(300, 300),
         A.Normalize(),
+        ToTensorV2()
+    ],
+    bbox_params=A.BboxParams(
+        format='pascal_voc',
+        label_fields=['labels'], # name (key) corresponding to the labels list
+        min_visibility=0.1
+    )
+)
+
+testing_transform = A.Compose( # Not for test dataset, only for debugging purposes
+    [
+        A.Resize(300, 300),
         ToTensorV2()
     ],
     bbox_params=A.BboxParams(

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Hello HTML Templates</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}">
+    <script src="{{url_for('static', filename='index.js')}}"></script>
+</head>
+<body>
+
+<div>
+
+    <h1>Upload an image or video!</h1>
+    <h2>Upload an Image</h2>
+      <form action="/upload-image" method="POST" enctype="multipart/form-data">
+        <input type="file" name="image" accept="image/*" onchange="previewImage(event)" required>
+        <img id="image-preview" src="#" alt="Image Preview" style="display:none; max-width:300px;">
+
+          <!-- Preprocessing options -->
+        <fieldset>
+            <legend>Select Preprocessing Steps:</legend>
+
+            <label for="sharpen">Sharpen:</label>
+            <input type="checkbox" id="sharpen" name="preprocessing" value="sharpen">
+
+            <label for="grayscale">Grayscale:</label>
+            <input type="checkbox" id="grayscale" name="preprocessing" value="grayscale">
+
+            <label for="threshold">Thresholding:</label>
+            <input type="checkbox" id="threshold" name="preprocessing" value="threshold">
+
+            <label for="show_steps">Show steps:</label>
+            <input type="checkbox" id="show_steps" name="preprocessing" value="show_steps" checked>
+        </fieldset>
+
+        <button type="submit">Upload</button>
+      </form>
+
+    {% if input_filename %}
+        <h3>Input Image</h3>
+        <img src="{{ url_for('static', filename='input_images/' + input_filename) }}" alt="Input Image">
+    {% endif %}
+
+    {% if output_filename %}
+        <h3>Processed Image</h3>
+        <img src="{{ url_for('static', filename='output_images/' + output_filename) }}" alt="Output Image">
+    {% endif %}
+
+    {% if steps_filename %}
+        <h3>Preprocessing Steps</h3>
+        <img src="{{ url_for('static', filename='output_images_steps/' + steps_filename) }}" alt="Preprocessing steps images">
+    {% endif %}
+
+
+
+</div>
+
+</body>
+</html>
