@@ -6,13 +6,14 @@ from PIL import Image, ImageFilter, ImageDraw, ImageFont
 import numpy as np
 import cv2
 import easyocr
+from paddleocr import PaddleOCR
 
 # Load model using fine-tuned weights from HPC
 model = YOLO("/Users/joe/Code/third-year-project/ANPR/yolov8n/weights/run9_best.pt") # pretrained
 
 # Initialise EasyOCR reader
-reader = easyocr.Reader(['en'], gpu=config.HPC)
-
+#reader = easyocr.Reader(['en'], gpu=config.HPC)
+ocr = PaddleOCR(use_angle_cls=True, lang='en') # need to run only once to download and load model into memory
 
 def reformat_bbox(bbox, image_height, image_width):
     """
@@ -55,12 +56,26 @@ def draw_bbox(image, draw, predicted_bbox, prediction_score, **preprocess_kwargs
 
     steps, np_img = localise_and_preprocess_license_plate(image, predicted_bbox, **preprocess_kwargs)
 
-    detections = reader.readtext(np_img)
+    #detections = reader.readtext(np_img)
     #print(detections)
 
+    # license_plate_text = ''
+    # for detection in detections:
+    #     license_plate_text += detection[1]
+    # if len(license_plate_text) == 0:
+    #     license_plate_text = 'NaN'
+
+    # formatted_np_img = np.array(np_img)[:, :, ::-1]  # Convert RGB to BGR
+    detections = ocr.ocr(np_img, cls=True)
+
     license_plate_text = ''
-    for detection in detections:
-        license_plate_text += detection[1]
+    if detections is not None or len(detections) != 0 or detections[0] is not None:
+        for i in range(len(detections)):
+            detection = detections[i]
+            for det in detection:
+                if len(det) >= 2:
+                    license_plate_text += det[1][0]
+
     if len(license_plate_text) == 0:
         license_plate_text = 'NaN'
 
@@ -78,25 +93,44 @@ def draw_bbox(image, draw, predicted_bbox, prediction_score, **preprocess_kwargs
     font = ImageFont.truetype(font_path, size=config.FONT_SIZE)
     xmin, ymin, xmax, ymax = draw.textbbox(xy=(x_min, y_min - config.FONT_SIZE), text=text, font=font)
 
+    # check if textbbox clips outside of image
+    text_x = x_min
+    text_y = y_min - config.FONT_SIZE
+    if ymin < 0:
+        text_y = y_min + config.FONT_SIZE
+    if xmax > image.size[0]:
+        text_x = image.size[0] - (xmax - xmin)
+
+
     # draw red background box with dimensions equal to text dimensions.
-    draw.rectangle([xmin, ymin, xmax, ymax], fill="red")
+    # draw.rectangle([xmin, ymin, xmax, ymax], fill="red")
+    draw.rectangle(
+        draw.textbbox(xy=(text_x, text_y), text=text, font=font),
+        fill="red"
+    )
     # Draw confidence score and plate text in white overlaid onto red background, and FONT_SIZE pixels above the predicted bbox
-    draw.text(xy=(x_min, y_min - config.FONT_SIZE), text=text, fill="white", font=font)
+    # draw.text(xy=(x_min, y_min - config.FONT_SIZE), text=text, fill="white", font=font)
+    draw.text(xy=(text_x, text_y), text=text, fill="white", font=font)
 
     # Draws the predicted bounding box outline in red
     draw.rectangle([x_min, y_min, x_max, y_max], outline="red", width=1)
 
     return steps # can be None if show_steps is False
 
+def rotate_image(image, angle):
+  image_center = tuple(np.array(image.shape[1::-1]) / 2)
+  rot_mat = cv2.getRotationMatrix2D(image_center, angle, 1.0)
+  result = cv2.warpAffine(image, rot_mat, image.shape[1::-1], flags=cv2.INTER_LINEAR)
+  return result
 
-def localise_and_preprocess_license_plate(image, predicted_bbox, *, sharpen=True, grayscale=True, threshold=False, show_steps=False):
+def localise_and_preprocess_license_plate(image, predicted_bbox, *, sharpen=True, grayscale=True, threshold=False, histogram_equalisation=False, rotate=0, show_steps=False):
     """
     Crops the image according to the predicted bbox. Resizes the crop, then sharpens and grayscales the crop. Then converts
     crop to a numpy array. (Optional thresholding step).
     :param image: PIL image
     :return: Preprocessed numpy image array
     """
-    steps = { "resized": None, "sharpened": None, "grayscale": None, "threshold": None } # contains at least one PIL image
+    steps = { "resized": None, "sharpened": None, "grayscale": None, "threshold": None, "histogram_equalisation": None, "rotated": None } # contains at least one PIL image
 
     # Crop the image to get the inferred numberplate
     cropped_image = crop_numberplate(image, predicted_bbox)
@@ -119,11 +153,20 @@ def localise_and_preprocess_license_plate(image, predicted_bbox, *, sharpen=True
         np_image = cv2.cvtColor(np_image, cv2.COLOR_RGB2GRAY)
         steps["grayscale"] = Image.fromarray(np_image)
 
+    if histogram_equalisation and grayscale:
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        np_image = clahe.apply(np_image)
+        steps["histogram_equalisation"] = Image.fromarray(np_image)
+
     if threshold and grayscale: # Thresholding is only meaningful in grayscale images
         np_image = cv2.adaptiveThreshold(
-            np_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+            np_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 17, 2 # blockSize=11
         )
         steps["threshold"] = Image.fromarray(np_image)
+
+    if rotate != 0:
+        np_image = rotate_image(np_image, rotate)
+        steps["rotated"] = Image.fromarray(np_image)
 
     if show_steps:
         return steps, np_image
@@ -164,7 +207,8 @@ if __name__ == '__main__':
 
                 np_img = localise_and_preprocess_license_plate(image, bbox)
 
-                detections = reader.readtext(np_img)
+                #detections = reader.readtext(np_img)
+                detections = None
                 print(detections)
 
                 license_plate_text = ''

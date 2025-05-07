@@ -3,7 +3,7 @@ import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from io import BytesIO
-from flask import Flask, request
+from flask import Flask, request, redirect, url_for
 from flask import render_template
 from werkzeug.utils import secure_filename
 from yolov8n.load_model_and_infer import draw_bbox
@@ -38,9 +38,14 @@ def upload_image():
     sharpen = True if 'sharpen' in preprocessing else False
     grayscale = True if 'grayscale' in preprocessing else False
     threshold = True if 'threshold' in preprocessing else False
+    histogram_equalisation = True if 'histogram_equalisation' in preprocessing else False
+    rotate = True if 'rotate' in preprocessing else False
     show_steps = True if 'show_steps' in preprocessing else False
+    angle = 0
+    if rotate:
+        angle = int(request.form.get('rotate_angle', 0)) if rotate else 0
 
-    print(sharpen, grayscale, threshold, show_steps)
+    print(sharpen, grayscale, threshold, histogram_equalisation, show_steps)
 
     image = Image.open(BytesIO(file.read()))
 
@@ -50,6 +55,7 @@ def upload_image():
     model = YOLO("/Users/joe/Code/third-year-project/ANPR/yolov8n/weights/run9_best.pt")  # pretrained
     # Run inference
     results = model(source=image, show=False, conf=0.4, verbose=False, save=False)
+
 
     all_steps = [] # holds all preprocessing steps for each bbox detection detected from the input image.
 
@@ -64,6 +70,8 @@ def upload_image():
                 sharpen=sharpen,
                 grayscale=grayscale,
                 threshold=threshold,
+                histogram_equalisation=histogram_equalisation,
+                rotate=angle,
                 show_steps=show_steps
             )
             if steps:
@@ -78,6 +86,8 @@ def upload_image():
 
     if len(stacks) == 1:
         steps_filename = save_image('.jpg', stacks[0], save_image_directory_name='output_images_steps')
+    if len(stacks) > 1:
+        steps_filename = save_image('.jpg', align_stacks(stacks), save_image_directory_name='output_images_steps')
 
     print(steps_filename, stacks)
 
@@ -107,8 +117,9 @@ def save_image(extension, image, *, save_image_directory_name):
     latest_image_num = 0
     if len(images) > 0:
         for filename in images:
-            filename, _ = os.path.splitext(filename)
-            latest_image_num = max(latest_image_num, int(filename.split('_')[1]))
+            if not filename.startswith('.'): # skip hidden files (like .DS_Store on mac)
+                filename, _ = os.path.splitext(filename)
+                latest_image_num = max(latest_image_num, int(filename.split('_')[1]))
 
 
     image.save(os.path.join(image_dir, f'image_{latest_image_num+1}{extension}'))
@@ -133,4 +144,20 @@ def stack_one_bbox_images(images):
 
     return canvas
 
-# def stack_stacks(stacks):
+def align_stacks(stacks): # preserves aspect ratio while keep all stacks the same height
+    max_height = max(stack.size[1] for stack in stacks)
+    resized_stacks = []
+    for stack in stacks:
+        w, h = stack.size
+        new_w = int(w * (max_height / h))
+        resized_stacks.append(stack.resize((new_w, max_height)))
+
+    total_width = sum(stack.size[0] for stack in resized_stacks)
+    canvas = Image.new('RGB', (total_width, max_height))
+
+    x = 0
+    for stack in resized_stacks:
+        canvas.paste(stack, (x, 0))
+        x += stack.size[0]
+
+    return canvas

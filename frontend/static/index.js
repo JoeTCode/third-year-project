@@ -7,3 +7,9 @@ function previewImage(event) {
       };
       reader.readAsDataURL(event.target.files[0]);
 }
+
+function toggleRotateInput() {
+    const checkbox = document.getElementById('rotate');
+    const input = document.getElementById('rotate-angle');
+    input.style.display = checkbox.checked ? 'inline' : 'none';
+}
