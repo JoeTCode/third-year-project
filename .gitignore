@@ -26,3 +26,5 @@ __pycache__/
 /frontend/static/output_images/
 /frontend/static/output_images_steps/
 /ssd/ssd_weights/
+/yolov8n/frames/
+/yolov8n/video/

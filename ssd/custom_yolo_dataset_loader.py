@@ -14,7 +14,13 @@ image_files = [image for image in os.listdir(config.TRAIN_IMAGES_ROOT)]
 annotations_files = [annotation for annotation in os.listdir(config.TRAIN_ANNOTATIONS_ROOT)]
 
 def find_overlap_bbox(bbox, crop, overlap_ratio_to_original=0.1):
-
+    """
+    Checks if a bbox overlaps with the cropped image, if true, resizes (if necessary) and returns the bbox.
+    :param bbox: Original bounding box.
+    :param crop: Cropped image.
+    :param overlap_ratio_to_original: (Float) The acceptable overlap ratio of the cropped bounding box compared to the original.
+    :return: The cropped bounding box.
+    """
     overlap_bbox = None
     x_min, y_min, x_max, y_max = bbox
     crop_x_min, crop_y_min, crop_x_max, crop_y_max = crop
@@ -27,6 +33,7 @@ def find_overlap_bbox(bbox, crop, overlap_ratio_to_original=0.1):
     if x_overlap_max > x_overlap_min and y_overlap_max > y_overlap_min:
         # Overlap exists
         overlap_bbox = [x_overlap_min - crop_x_min, y_overlap_min - crop_y_min, x_overlap_max - crop_x_min, y_overlap_max - crop_y_min]
+        # Adjust bounding box edges to be fully inside the cropped image
         if int(overlap_bbox[0]) == 0:
             overlap_bbox[0] = 1
         if int(overlap_bbox[1]) == 0:
@@ -98,7 +105,7 @@ def create_mosaic(images, annotations, idx=0):
     # draw = ImageDraw.Draw(mosaic)
     image_number = 1
     mosaic_bboxes = [[], [], [], []]
-    # Adjust bboxes after stitching images together into mosaic
+
     for annotation in annotations:
         bboxes = annotation['boxes']
         for bbox in bboxes:
@@ -139,6 +146,7 @@ def create_mosaic(images, annotations, idx=0):
     cropped_mosaic = mosaic.crop((crop_x_min, crop_y_min, crop_x_max, crop_y_max))
     # cropped_mosaic_draw = ImageDraw.Draw(cropped_mosaic)
 
+    # Adjust bboxes after stitching images together into mosaic
     final_bboxes = []
     final_labels = []
     for i, bboxes in enumerate(mosaic_bboxes):

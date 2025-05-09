@@ -39,11 +39,8 @@ def upload_image():
     grayscale = True if 'grayscale' in preprocessing else False
     threshold = True if 'threshold' in preprocessing else False
     histogram_equalisation = True if 'histogram_equalisation' in preprocessing else False
-    rotate = True if 'rotate' in preprocessing else False
     show_steps = True if 'show_steps' in preprocessing else False
-    angle = 0
-    if rotate:
-        angle = int(request.form.get('rotate_angle', 0)) if rotate else 0
+
 
     print(sharpen, grayscale, threshold, histogram_equalisation, show_steps)
 
@@ -71,7 +68,6 @@ def upload_image():
                 grayscale=grayscale,
                 threshold=threshold,
                 histogram_equalisation=histogram_equalisation,
-                rotate=angle,
                 show_steps=show_steps
             )
             if steps:

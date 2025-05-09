@@ -16,7 +16,7 @@
     <form action="/upload-image" method="POST" enctype="multipart/form-data">
         <input type="file" name="image" accept="image/*" onchange="previewImage(event)" required>
         <img id="image-preview" src="#" alt="Image Preview" style="display:none; max-width:300px;">
-        <!-- Preprocessing options -->
+
         <fieldset>
             <legend>Select Preprocessing Steps:</legend>
             <label for="sharpen">Sharpen:</label>
@@ -31,10 +31,6 @@
             <label for="histogram_equalisation">Histogram Equalisation (for dark/bright images):</label>
             <input type="checkbox" id="histogram_equalisation" name="preprocessing" value="histogram_equalisation">
             <br>
-            <label for="rotate">Rotate license plate:</label>
-            <input type="checkbox" id="rotate" name="preprocessing" value="rotate" onclick="toggleRotateInput()">
-            <input type="number" id="rotate-angle" name="rotate_angle" placeholder="Angle" style="display: none;">
-            <br>
             <label for="show_steps">Show steps:</label>
             <input type="checkbox" id="show_steps" name="preprocessing" value="show_steps" checked>
         </fieldset>
@@ -48,7 +44,6 @@
         <video controls id="video-preview" style="display:none; max-width:300px;">
             <source id="video-src" src="#" type="#">
         </video>
-        <!-- Preprocessing options -->
     </form>
 
     {% if input_filename %}
@@ -65,8 +60,6 @@
         <h3>Preprocessing Steps</h3>
         <img src="{{ url_for('static', filename='output_images_steps/' + steps_filename) }}" alt="Preprocessing steps images" style="max-width:300px;">
     {% endif %}
-
-
 
 </div>
 
