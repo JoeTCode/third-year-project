@@ -1,3 +1,5 @@
+import time
+
 from ultralytics import YOLO
 from ssd.show_predictions import crop_numberplate, resize_image_maintain_aspect_ratio
 from config import config
@@ -7,13 +9,11 @@ import numpy as np
 import cv2
 # import easyocr
 from paddleocr import PaddleOCR
-
-# Load model using fine-tuned weights from HPC
-model = YOLO("/Users/joe/Code/third-year-project/ANPR/yolov8n/weights/run9_best.pt") # pretrained
+import uuid
 
 # Initialise EasyOCR reader
 #reader = easyocr.Reader(['en'], gpu=config.HPC)
-ocr = PaddleOCR(use_angle_cls=True, lang='en') # need to run only once to download and load model into memory
+
 
 def reformat_bbox(bbox, image_height, image_width):
     """
@@ -39,8 +39,29 @@ def reformat_bbox(bbox, image_height, image_width):
 
     return [x_min, y_min, x_max, y_max]
 
+def save_image(extension, image, *, images_dir):
+    """
 
-def draw_bbox(image, draw, predicted_bbox, prediction_score, **preprocess_kwargs):
+    :param extension: (Str) Image file's extension. (.jpg, .png)
+    :param image: BGR image array.
+    :param images_dir: (Str) 'output_images' or 'input_images'.
+    :return: (Str) Filename of the saved image. Either input_<int> or output_<int>.
+    """
+
+    images = [image for image in os.listdir(images_dir) if not image.startswith('.')]
+
+    image_id = -1
+    if len(images) > 0:
+        for filename in images:
+            filename, _ = os.path.splitext(filename)
+            image_id = max(image_id, int(filename.split('_')[1]))
+
+    image_id +=1
+    save_path = os.path.join(images_dir, f'image_{image_id}{extension}')
+    cv2.imwrite(save_path, image)
+    return f'image_{image_id}{extension}'
+
+def draw_bbox(image, draw, predicted_bbox, prediction_score, ocr, plate_type=False, **preprocess_kwargs):
     """
     Draws bounding box on the image. Takes one predicted bbox and prediction score at a time. If image has multiple
     license plates, each model predicted bbox and score should be provided one by one.
@@ -67,9 +88,18 @@ def draw_bbox(image, draw, predicted_bbox, prediction_score, **preprocess_kwargs
     #     license_plate_text = 'NaN'
 
     # formatted_np_img = np.array(np_img)[:, :, ::-1]  # Convert RGB to BGR
-    detections = ocr.ocr(np_img, cls=True)
+
+    # Read number plate text
+    # detections = ocr.ocr(np_img, cls=True)
+
+    bgr = cv2.cvtColor(np_img, cv2.COLOR_RGB2BGR)
+    images_dir = '/Users/joe/Code/third-year-project/ANPR/backend/ocr-image'
+    image_filename = save_image('.png', bgr, images_dir=images_dir)
+    image_path = os.path.join(images_dir, image_filename)
+    detections = ocr.ocr(image_path, cls=True)
 
     license_plate_text = ''
+    print(f'detections {detections}', flush=True)
     if detections[0] is not None:
         for i in range(len(detections)):
             detection = detections[i]
@@ -80,10 +110,13 @@ def draw_bbox(image, draw, predicted_bbox, prediction_score, **preprocess_kwargs
     if len(license_plate_text) == 0:
         license_plate_text = 'NaN'
 
-    # Gets score for bounding box in the desired format.
+    # Gets confidence score for predicted bounding box in the desired format.
     text = str(round(prediction_score.item(), 2))
     text += '    '
     text += license_plate_text
+
+    if plate_type is not False:
+        text += ' | ' + plate_type
 
     # if not config.HPC:
     font_path = "/Users/joe/Code/third-year-project/ANPR/fonts/DejaVuSans.ttf"
@@ -112,7 +145,7 @@ def draw_bbox(image, draw, predicted_bbox, prediction_score, **preprocess_kwargs
     draw.text(xy=(text_x, text_y), text=text, fill="white", font=font)
 
     # Draws the predicted bounding box outline in red
-    draw.rectangle([x_min, y_min, x_max, y_max], outline="red", width=1)
+    draw.rectangle([x_min, y_min, x_max, y_max], outline="red", width=2)
 
     return steps # can be None if show_steps is False
 
@@ -170,6 +203,10 @@ def localise_and_preprocess_license_plate(image, predicted_bbox, *, sharpen=True
     return None, np_image
 
 if __name__ == '__main__':
+    # Load model using fine-tuned weights from HPC
+    model = YOLO("/Users/joe/Code/third-year-project/ANPR/yolov8n/weights/run9_best.pt")  # pretrained
+    ocr = PaddleOCR(use_angle_cls=True, lang='en')  # need to run only once to download and load model into memory
+
     for i, image in enumerate(os.listdir(config.VALID_IMAGES_ROOT)):
         pil_image = Image.open(os.path.join(config.VALID_IMAGES_ROOT, image))
         draw = ImageDraw.Draw(pil_image)

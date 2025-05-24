@@ -1,3 +1,5 @@
+# For vehicle registration plate data acquired from OpenImagesv7
+
 import pandas as pd
 import os
 

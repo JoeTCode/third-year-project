@@ -161,7 +161,6 @@ num_classes = 2
 # Retrieve the list of input channels.
 in_channels = _utils.retrieve_out_channels(model.backbone, (300, 300))
 
-# List containing number of anchors based on aspect ratios.
 num_anchors = model.anchor_generator.num_anchors_per_location()
 
 # The classification head.

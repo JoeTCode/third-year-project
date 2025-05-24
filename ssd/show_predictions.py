@@ -9,12 +9,12 @@ import cv2
 import torch
 from config import config
 
-# Initialise EasyOCR reader
+# Initialise EasyOCR reader settings
 gpu = False
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 if device.type == 'cuda':
     gpu = True
-reader = easyocr.Reader(['en'], gpu=gpu)
+# reader = easyocr.Reader(['en'], gpu=gpu)
 
 def crop_numberplate(pil_image, bbox):
     x_min, y_min, x_max, y_max = bbox
@@ -121,6 +121,8 @@ def map_bbox_to_image(batch_images, targets, predictions, save_directory, origin
     :param save:
     :return:
     """
+    reader = easyocr.Reader(['en'], gpu=gpu)
+
     for i, image in enumerate(batch_images):
         image = transforms.ToPILImage()(image)  # Convert from tensor to PIL image for visualization
 

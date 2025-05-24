@@ -13,6 +13,6 @@ dataset = foz.load_zoo_dataset(
     split="train",  # dataset type e.g. train, validation, test, etc.
     label_types=["detections"],  # type of annotation e.g. detections, segmentation etc.
     classes=classes,  # category types e.g. person, car, vehicle registration plate etc.
-    max_samples=500,  # limit the number of samples
+    max_samples=4000,  # limit the number of samples
 )
 

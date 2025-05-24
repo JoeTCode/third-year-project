@@ -72,19 +72,15 @@ def frame_inference(frames_directory, model, output_video_num_frames):
         if i == output_video_num_frames:
             return video
 
+
 if __name__ == "__main__":
-    # print(format_image_filename('frame-1003.jpg'))
     start = time.time()
     output_frames = 100
     video = frame_inference('./frames', model, output_frames)
 
-    # # Release the video file
+    # Release the video file
     video.release()
     cv2.destroyAllWindows()
     print(f"Video generated successfully in {time.time() - start:.2f} seconds, with {output_frames} frame(s)!")
 
 # Video generated successfully in 78.71 seconds, with 100 frame(s)!
-
-def batch_images(images_list, batch_size=16):
-    for i in range(0, len(images_list), batch_size):
-        yield images_list[i:i + batch_size]

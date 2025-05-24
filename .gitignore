@@ -28,3 +28,7 @@ __pycache__/
 /ssd/ssd_weights/
 /yolov8n/frames/
 /yolov8n/video/
+/classifier/train/
+/classifier/test/
+/classifier/val/
+/classifier/save_weights/

@@ -15,10 +15,13 @@ annotations_files = [annotation for annotation in os.listdir(config.TRAIN_ANNOTA
 
 def find_overlap_bbox(bbox, crop, overlap_ratio_to_original=0.1):
     """
-    Checks if a bbox overlaps with the cropped image, if true, resizes (if necessary) and returns the bbox.
+    Checks if a bbox overlaps with the cropped image, if true,
+    resizes (if necessary) and returns the bbox.
     :param bbox: Original bounding box.
     :param crop: Cropped image.
-    :param overlap_ratio_to_original: (Float) The acceptable overlap ratio of the cropped bounding box compared to the original.
+    :param overlap_ratio_to_original:
+        (Float) The acceptable overlap ratio of the cropped bounding box
+        compared to the original.
     :return: The cropped bounding box.
     """
     overlap_bbox = None
@@ -32,7 +35,8 @@ def find_overlap_bbox(bbox, crop, overlap_ratio_to_original=0.1):
 
     if x_overlap_max > x_overlap_min and y_overlap_max > y_overlap_min:
         # Overlap exists
-        overlap_bbox = [x_overlap_min - crop_x_min, y_overlap_min - crop_y_min, x_overlap_max - crop_x_min, y_overlap_max - crop_y_min]
+        overlap_bbox = [x_overlap_min - crop_x_min, y_overlap_min - crop_y_min,
+                        x_overlap_max - crop_x_min, y_overlap_max - crop_y_min]
         # Adjust bounding box edges to be fully inside the cropped image
         if int(overlap_bbox[0]) == 0:
             overlap_bbox[0] = 1
@@ -55,7 +59,6 @@ def find_overlap_bbox(bbox, crop, overlap_ratio_to_original=0.1):
         bbox_area = float(bbox_area)
 
         if overlap_bbox_area/bbox_area < overlap_ratio_to_original:
-            #print(f"Original area: {bbox_area}, Overlap area: {overlap_bbox_area}, Ratio: {overlap_bbox_area / bbox_area}")
             return None
 
     return overlap_bbox
@@ -82,8 +85,6 @@ def create_mosaic(images, annotations, idx=0):
         assert isinstance(image, Image.Image), "Please provide (four) PIL images"
         w, h = image.size
         if w > 300 or h > 300:
-            # if not config.HPC: images[i] = image.resize((300, 300), Image.Resampling.LANCZOS)
-            # else: images[i] = image.resize((300, 300), Image.ANTIALIAS)
             resized_dict = Resize((300,300))({"image": image, "annotations": annotations[i]})
             resized_image, resized_annotations = resized_dict["image"], resized_dict["annotations"]
             images[i] = resized_image
@@ -150,13 +151,12 @@ def create_mosaic(images, annotations, idx=0):
     final_bboxes = []
     final_labels = []
     for i, bboxes in enumerate(mosaic_bboxes):
-        bboxes_labels = annotations[i]['labels']
         for j, bbox in enumerate(bboxes):
-            bbox_label = bboxes_labels[j]
             overlap_bbox = find_overlap_bbox(bbox, (crop_x_min, crop_y_min, crop_x_max, crop_y_max))
             if overlap_bbox:
                 final_bboxes.append(overlap_bbox)
                 final_labels.append(1) # Bbox is valid, add label
+
                 # print("overlap",overlap_bbox)
                 # print("crop", crop_x_min, crop_y_min, crop_x_max, crop_y_max)
                 # cropped_mosaic_draw.rectangle(overlap_bbox, outline='red', width=1)
@@ -249,7 +249,7 @@ class ToTensor:
 
 def reformat_bbox(bbox, image_height, image_width):
     """
-    Converts YOLO bounding box: [x_center, y_center, width, height] to pytorch bounding box: [x_min, y_min, x_max, y_max].
+    Converts YOLO bounding box: [x_center, y_center, width, height] to PASCAL VOC bounding box: [x_min, y_min, x_max, y_max].
     :param image_width:
     :param image_height:
     :param bbox: (List), [x_center, y_center, width, height].
@@ -385,8 +385,6 @@ class AnprYoloDataset(Dataset):
             annotations_list = []
 
             images = []
-            list_of_bboxes = []
-            list_of_labels = []
             for i in range(4):
                 annotations = {"image_id": idx}
                 # Images
@@ -405,7 +403,6 @@ class AnprYoloDataset(Dataset):
 
             sample = {"image": mosaic, "annotations": annotations}  # Combine, as compose only accepts 1 argument
             if self.transform:
-                # mosaic, annotations = self.transform(sample)  # Transformed sample
                 mosaic, annotations = apply_transform(sample['image'], sample['annotations'], self.transform)
 
             if annotations['boxes'].shape[0] == 0:  # If target boxes are empty (after transform) set as background
@@ -422,19 +419,12 @@ class AnprYoloDataset(Dataset):
         bboxes, labels = get_matching_annotations(self.annotations_root, self.annotations_files, idx, image_height, image_width)
 
         annotations = {
-            # Needs to be dtype int64 otherwise model throws error
             "image_id": torch.tensor(idx, dtype=torch.int64),
             "boxes": torch.tensor(bboxes, dtype=torch.float),
             "labels": torch.tensor(labels, dtype=torch.int64)  # category id
         }
 
-        # If necessary, perform transforms (e.g., resize, normalize) using custom transform
-        sample = {"image": image, "annotations": annotations}  # Combine, as compose only accepts 1 argument
-
-        # if self.transform: # torchvision transform
-        #     image, annotations = self.transform(sample)  # Transformed sample
-
-        if self.transform: # Albumetations transform
+        if self.transform: # Albumentations augmentations
             image, annotations = apply_transform(image, annotations, self.transform)
 
         if annotations['boxes'].shape[0] == 0: # If target boxes are empty (after transform) set as background
@@ -443,15 +433,6 @@ class AnprYoloDataset(Dataset):
 
         return image, annotations
 
-
-# transform = transforms.Compose([
-#     Resize((300, 300)),
-#     ToTensor(),
-#     # Image net normalisation
-#     transforms.Normalize(mean=[0.485, 0.456, 0.406],
-#                          std=[0.229, 0.224, 0.225]),
-#     transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2)
-# ])
 
 train_transform = A.Compose(
     [

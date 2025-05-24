@@ -1,7 +1,7 @@
 import sys
 import os
-
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from io import BytesIO
 from flask import Flask, request, redirect, url_for
 from flask import render_template
@@ -9,8 +9,16 @@ from werkzeug.utils import secure_filename
 from yolov8n.load_model_and_infer import draw_bbox
 from PIL import Image, ImageDraw
 from ultralytics import YOLO
+import torch
+import torch.nn as nn
+from torchvision import models
+from ssd.show_predictions import crop_numberplate
+from torchvision import transforms
+from paddleocr import PaddleOCR
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+ocr = PaddleOCR(use_angle_cls=True, lang='en')  # need to run only once to download and load model into memory
+model = YOLO("/Users/joe/Code/third-year-project/ANPR/yolov8n/weights/run9_best.pt")  # pretrained
 
 app = Flask(
     __name__,
@@ -26,7 +34,7 @@ def index_page():
 def upload_image():
 
     if 'image' not in request.files:
-        return 'No file part', 400
+        return 'No file', 400
     file = request.files['image']
     if file.filename == '':
         return 'No selected file', 400
@@ -41,15 +49,22 @@ def upload_image():
     histogram_equalisation = True if 'histogram_equalisation' in preprocessing else False
     show_steps = True if 'show_steps' in preprocessing else False
 
-
-    print(sharpen, grayscale, threshold, histogram_equalisation, show_steps)
-
     image = Image.open(BytesIO(file.read()))
 
     input_filename = save_image(extension, image, save_image_directory_name='input_images')
     #image.save(f"frontend/static/input_images/{filename}")
 
-    model = YOLO("/Users/joe/Code/third-year-project/ANPR/yolov8n/weights/run9_best.pt")  # pretrained
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
+
+    model_path = '/Users/joe/Code/third-year-project/ANPR/classifier/save_weights/mobilenet_v2_weights_1.pth'
+    classifier = load_plate_classifier(model_path, device)
+
     # Run inference
     results = model(source=image, show=False, conf=0.4, verbose=False, save=False)
 
@@ -62,14 +77,21 @@ def upload_image():
         prediction_scores = r.boxes.conf
         for i, predicted_bbox in enumerate(bbox_predictions):
             prediction_score = prediction_scores[i]
+
+            cropped_image = crop_numberplate(image, predicted_bbox)
+            plate_types = ['EU', 'Non-EU']
+            plate_id = return_plate_type(cropped_image, classifier, transform, device)
+            plate_type = plate_types[plate_id]
+
             steps = draw_bbox(
-                image, draw, predicted_bbox, prediction_score,
+                image, draw, predicted_bbox, prediction_score, ocr, plate_type=plate_type,
                 sharpen=sharpen,
                 grayscale=grayscale,
                 threshold=threshold,
                 histogram_equalisation=histogram_equalisation,
                 show_steps=show_steps
             )
+
             if steps:
                 all_steps.append(list(steps.values()))
 
@@ -97,6 +119,34 @@ def upload_image():
         steps_filename=steps_filename
     )
 
+def load_plate_classifier(model_path, device):
+    model = models.mobilenet_v2()
+    model.classifier[1] = nn.Linear(model.last_channel, 2)
+
+    model.load_state_dict(torch.load(model_path))
+    model.eval()
+    model.to(device)
+    return model
+
+def return_plate_type(cropped_image, model, transform, device):
+    """
+
+    :param cropped_image:
+    :return: (Int) Returns 0 or 1. Where EU: 0 and Non-EU: 1
+    """
+
+    if cropped_image.mode != 'RGB':
+        cropped_image = cropped_image.convert('RGB')
+    img = transform(cropped_image)
+
+
+    with torch.no_grad():
+        output = model(img.unsqueeze(0).to(device))
+        _, pred = torch.max(output, 1)
+        class_idx = pred.item()
+        print(f'Classifier pred: {class_idx}')
+        return class_idx # EU: 0, Non-EU: 1
+
 
 def save_image(extension, image, *, save_image_directory_name):
     """
@@ -108,25 +158,23 @@ def save_image(extension, image, *, save_image_directory_name):
     """
 
     image_dir = os.path.join(BASE_DIR, 'frontend', 'static', save_image_directory_name)
-    images = os.listdir(image_dir)
+    images = [image for image in os.listdir(image_dir) if not image.startswith('.')]
 
-    latest_image_num = 0
+    image_id = -1
     if len(images) > 0:
         for filename in images:
-            if not filename.startswith('.'): # skip hidden files (like .DS_Store on mac)
-                filename, _ = os.path.splitext(filename)
-                latest_image_num = max(latest_image_num, int(filename.split('_')[1]))
+            filename, _ = os.path.splitext(filename)
+            image_id = max(image_id, int(filename.split('_')[1]))
 
-
-    image.save(os.path.join(image_dir, f'image_{latest_image_num+1}{extension}'))
-
-    if latest_image_num == 1: return f'image_0{extension}'
-    else: return f'image_{latest_image_num+1}{extension}'
+    image_id += 1
+    image.save(os.path.join(image_dir, f'image_{image_id}{extension}'))
+    return f'image_{image_id}{extension}'
 
 
 def stack_one_bbox_images(images):
     valid_images = [image for image in images if image is not None]
-    widths, heights = zip(*(image.size for image in valid_images))
+    widths = [image.size[0] for image in valid_images]
+    heights = [image.size[1] for image in valid_images]
 
     max_width = max(widths)
     total_height = sum(heights)
