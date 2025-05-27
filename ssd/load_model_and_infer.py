@@ -1,7 +1,6 @@
 import time
 import torch
 import torchvision
-from torchvision import transforms
 from custom_yolo_dataset_loader import AnprYoloDataset, Resize, ToTensor, validation_transform
 from torch.utils.data import DataLoader
 from torchvision.models.detection.ssd import SSD300_VGG16_Weights
@@ -14,15 +13,11 @@ from show_predictions import map_bbox_to_image
 # perform inference on the GPU, or on the CPU if a GPU is not available
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-# Perform transformations using transforms function
-# transform = transforms.Compose([
-#     Resize((300, 300)),
-#     ToTensor()
-# ])
+weights_path = 'ssd_checkpoints/checkpoint_epoch_25.pth'
 
-valid_dataset = AnprYoloDataset(
-    annotations_root=config.VALID_ANNOTATIONS_ROOT,
-    images_root=config.VALID_IMAGES_ROOT,
+test_dataset = AnprYoloDataset(
+    annotations_root=config.TEST_ANNOTATIONS_ROOT,
+    images_root=config.TEST_IMAGES_ROOT,
     transform=validation_transform
 )
 
@@ -39,12 +34,12 @@ def collate_fn(batch):
 
 # Use dataloader function load the dataset in the specified transformation.
 if config.HPC:
-    valid_dataloader = DataLoader(
-        valid_dataset, batch_size=32, shuffle=False, num_workers=1, pin_memory=True, collate_fn=collate_fn
+    test_dataloader = DataLoader(
+        test_dataset, batch_size=32, shuffle=False, num_workers=1, pin_memory=True, collate_fn=collate_fn
     )
 else:
-    valid_dataloader = DataLoader(
-        valid_dataset, batch_size=config.BATCH_SIZE, shuffle=False, num_workers=0, collate_fn=collate_fn
+    test_dataloader = DataLoader(
+        test_dataset, batch_size=config.BATCH_SIZE, shuffle=False, num_workers=0, collate_fn=collate_fn
     )
 
 # Load the model with pretrained weights
@@ -67,7 +62,7 @@ model.head.classification_head = SSDClassificationHead(
 )
 
 # Load Checkpoint
-checkpoint = torch.load('ssd_checkpoints/checkpoint_epoch_25.pth', map_location=torch.device(device))
+checkpoint = torch.load(weights_path, map_location=torch.device(device))
 # Pass loaded states to model
 model.load_state_dict(checkpoint['model_state_dict'])
 
@@ -79,30 +74,23 @@ metric = MeanAveragePrecision(iou_type="bbox").to(device)  # Initialise and move
 
 evaluation_start_time = time.time()
 # Loop over the validation set
-for i_batch, sample_batched in enumerate(valid_dataloader):
-    images = sample_batched[0]
-    annotations = sample_batched[1]
+with torch.no_grad():
+    for i_batch, sample_batched in enumerate(test_dataloader):
+        images = sample_batched[0]
+        annotations = sample_batched[1]
 
-    # Move images to device (CPU or GPU)
-    images = images.to(device)
+        # Move images to device (CPU or GPU)
+        images = images.to(device)
 
-    # Remove image_id from annotations, and move bboxes and labels to device
-    targets = [
-        {key: value.to(device) for key, value in annotation.items() if key != 'image_id'} for annotation
-        in annotations
-    ]
+        # Remove image_id from annotations, and move bboxes and labels to device
+        targets = [
+            {key: value.to(device) for key, value in annotation.items() if key != 'image_id'} for annotation
+            in annotations
+        ]
 
-    # Make the predictions
-    predictions = model(images)
-    metric.update(predictions, targets)
-
-    # Generate image only when the eval is at its last batch
-    #if i_batch == len(valid_dataloader) - 1:
-    # pass predictions twice as we access boxes and scores from it\
-
-    if i_batch % config.NUM_LOGS == 0:
-        map_bbox_to_image(images, targets, predictions,
-                          config.SAVE_IMAGE_DIRECTORY)
+        # Make the predictions
+        predictions = model(images)
+        metric.update(predictions, targets)
 
 # Compute final mAP over all batches
 metrics = metric.compute()

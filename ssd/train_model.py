@@ -38,9 +38,6 @@ def compute_confusion_counts(predicted_labels, target_labels):
 
     assert len(target_labels) > 0, "Invalid target labels"
 
-    if len(predicted_labels) == 0:
-        return {"TP": TP, "FP": FP, "TN": TN, "FN": FN}
-
     # Don't need to check if len(pred) < len(target)
     for pred, target in zip_longest(predicted_labels, target_labels, fillvalue=-1):
         if pred == -1: # If predictions is shorter

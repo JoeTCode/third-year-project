@@ -58,8 +58,7 @@ def filter_model_predictions(predicted_bboxes, predicted_scores, predicted_label
     """
 
     # 2 steps: Confidence score threshold filter, then NMS filter.
-    # Filter out all bboxes that have confidence scores below the score threshold (NMS doesn't effectively get rid
-    # of all un-accurate bounding boxes, and there can be hundreds of detections per image)
+    # Filter out all bboxes that have confidence scores below the score threshold
     score_confidence_mask = predicted_scores > bbox_score_threshold  # true false array
     bboxes = predicted_bboxes[score_confidence_mask]
     scores = predicted_scores[score_confidence_mask]

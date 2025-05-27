@@ -104,10 +104,9 @@ def create_mosaic(images, annotations, idx=0):
 
     # Start drawing bboxes
     # draw = ImageDraw.Draw(mosaic)
-    image_number = 1
     mosaic_bboxes = [[], [], [], []]
 
-    for annotation in annotations:
+    for image_index, annotation in enumerate(annotations):
         bboxes = annotation['boxes']
         for bbox in bboxes:
             x_min, y_min, x_max, y_max = bbox
@@ -117,19 +116,19 @@ def create_mosaic(images, annotations, idx=0):
                 x_max = x_max.item()
                 y_max = y_max.item()
 
-            if image_number == 1:
+            if image_index == 0:
                 mosaic_bboxes[0].append([x_min, y_min, x_max, y_max])
 
-            if image_number == 2:
+            if image_index == 1:
                 x_min += im1.width
                 x_max += im1.width
                 mosaic_bboxes[1].append([x_min, y_min, x_max, y_max])
 
-            if image_number == 3:
+            if image_index == 2:
                 y_min += im1.height
                 y_max += im1.height
                 mosaic_bboxes[2].append([x_min, y_min, x_max, y_max])
-            if image_number == 4:
+            if image_index == 3:
                 x_min += im1.width
                 x_max += im1.width
                 y_min += im1.height
@@ -137,8 +136,6 @@ def create_mosaic(images, annotations, idx=0):
                 mosaic_bboxes[3].append([x_min, y_min, x_max, y_max])
 
             # draw.rectangle([x_min, y_min, x_max, y_max], outline="red", width=1)
-
-        image_number += 1
 
     # Resulting random crop is 300x300 in size
     crop_y_min, crop_x_min, crop_height, crop_width = transforms.RandomCrop.get_params(mosaic, output_size=(300, 300))
@@ -163,6 +160,7 @@ def create_mosaic(images, annotations, idx=0):
 
     # If there are no detections in the cropped image, then set the label to background, and insert dummy bbox
     if len(final_bboxes) == 0:
+        print("MOSAIC ASSIGNED BACKGROUND")
         final_bboxes = [[0, 0, 1, 1]]
         final_labels = [0]
 
