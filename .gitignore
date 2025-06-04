@@ -21,9 +21,6 @@ __pycache__/
 .DS_Store
 
 /yolov8n/runs/
-/frontend/static/input_images/
-/frontend/static/output_images/
-/frontend/static/output_images_steps/
 /ssd/ssd_weights/
 /yolov8n/frames/
 /yolov8n/video/
