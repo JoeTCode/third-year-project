@@ -1,7 +1,7 @@
 import time
 import torch
 import torchvision
-from custom_yolo_dataset_loader import AnprYoloDataset, Resize, ToTensor, validation_transform
+from custom_yolo_dataset_loader import AnprYoloDataset, ToTensor, validation_transform
 from torch.utils.data import DataLoader
 from torchvision.models.detection.ssd import SSD300_VGG16_Weights
 from torchvision.models.detection.ssd import SSDClassificationHead
@@ -9,6 +9,7 @@ from torchvision.models.detection import _utils
 from config import config
 from torchmetrics.detection import MeanAveragePrecision
 from show_predictions import map_bbox_to_image
+from tqdm import tqdm
 
 # perform inference on the GPU, or on the CPU if a GPU is not available
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -75,7 +76,7 @@ metric = MeanAveragePrecision(iou_type="bbox").to(device)  # Initialise and move
 evaluation_start_time = time.time()
 # Loop over the validation set
 with torch.no_grad():
-    for i_batch, sample_batched in enumerate(test_dataloader):
+    for i_batch, sample_batched in enumerate(tqdm(test_dataloader)):
         images = sample_batched[0]
         annotations = sample_batched[1]
 
@@ -96,8 +97,13 @@ with torch.no_grad():
 metrics = metric.compute()
 map, map_50, map_75 = metrics['map'].item(), metrics['map_50'].item(), metrics['map_75'].item()
 evaluation_time = time.time() - evaluation_start_time
+num_images = len(test_dataset)
+average_time_per_image = evaluation_time/num_images
 print(f'mAP: {(map):<4}'
       f'  mAP-50: {map_50:<4}'
       f'  mAP-75: {map_75:<4}'
-      f'  time: {round(evaluation_time, 2)} s')
+      f'  time: {round(evaluation_time, 2)} s'
+      f'  Average inference time per image: {round(average_time_per_image*1000, 2)} ms'
+      )
+
 

@@ -1,7 +1,7 @@
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
+from config import config
 from io import BytesIO
 from flask import Flask, request, redirect, url_for
 from flask import render_template
@@ -18,7 +18,7 @@ from paddleocr import PaddleOCR
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 ocr = PaddleOCR(use_angle_cls=True, lang='en')  # need to run only once to download and load model into memory
-model = YOLO("/Users/joe/Code/third-year-project/ANPR/yolov8n/weights/run9_best.pt")  # pretrained
+model = YOLO(config.YOLO_WEIGHT)  # pretrained
 
 app = Flask(
     __name__,
@@ -62,8 +62,7 @@ def upload_image():
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ])
 
-    model_path = '/Users/joe/Code/third-year-project/ANPR/classifier/save_weights/mobilenet_v2_weights_1.pth'
-    classifier = load_plate_classifier(model_path, device)
+    classifier = load_plate_classifier(config.MOBILENET_V2_WEIGHTS, device)
 
     # Run inference
     results = model(source=image, show=False, conf=0.4, verbose=False, save=False)

@@ -174,7 +174,7 @@ def map_bbox_to_image(batch_images, targets, predictions, save_directory, origin
                 text += license_plate_text
 
                 # Gets dimensions of text so a rectangle can be mapped under it (anchor set to FONT_SIZE pixels above predicted bbox)
-                if not config.HPC: font_path = "/Users/joe/Code/third-year-project/ANPR/fonts/DejaVuSans.ttf"
+                if not config.HPC: font_path = config.FONT_PATH
                 else: font_path = "/gpfs/home/hyg22ktu/fonts/DejaVuSans.ttf"
                 font = ImageFont.truetype(font_path, size=config.FONT_SIZE)
 

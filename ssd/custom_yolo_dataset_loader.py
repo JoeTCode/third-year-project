@@ -79,16 +79,17 @@ def create_mosaic(images, annotations, idx=0):
         single annotation's dictionary. If the cropped image has no plate detections, the annotation label should be
         set as background.
     """
-    assert len(images) == 4, "Please provide four (PIL) images"
 
     for i, image in enumerate(images):
-        assert isinstance(image, Image.Image), "Please provide (four) PIL images"
         w, h = image.size
         if w > 300 or h > 300:
-            resized_dict = Resize((300,300))({"image": image, "annotations": annotations[i]})
-            resized_image, resized_annotations = resized_dict["image"], resized_dict["annotations"]
-            images[i] = resized_image
-            annotations[i] = resized_annotations
+            # resized_dict = Resize((300,300))({"image": image, "annotations": annotations[i]})
+            resized = resize(image=np.array(image), bboxes=annotations[i]['boxes'], labels=annotations[i]['labels'])
+            resized_image, resized_boxes = resized['image'], resized['bboxes']
+            resized_pil_image = Image.fromarray(resized_image)
+            # resized_image, resized_annotations = resized_dict["image"], resized_dict["annotations"]
+            images[i] = resized_pil_image
+            annotations[i]['boxes'] = resized_boxes
 
     im1, im2, im3, im4 = images
 
@@ -102,8 +103,6 @@ def create_mosaic(images, annotations, idx=0):
     mosaic.paste(im3, (0, im1.height))
     mosaic.paste(im4, (im1.width, im1.height))
 
-    # Start drawing bboxes
-    # draw = ImageDraw.Draw(mosaic)
     mosaic_bboxes = [[], [], [], []]
 
     for image_index, annotation in enumerate(annotations):
@@ -154,10 +153,6 @@ def create_mosaic(images, annotations, idx=0):
                 final_bboxes.append(overlap_bbox)
                 final_labels.append(1) # Bbox is valid, add label
 
-                # print("overlap",overlap_bbox)
-                # print("crop", crop_x_min, crop_y_min, crop_x_max, crop_y_max)
-                # cropped_mosaic_draw.rectangle(overlap_bbox, outline='red', width=1)
-
     # If there are no detections in the cropped image, then set the label to background, and insert dummy bbox
     if len(final_bboxes) == 0:
         print("MOSAIC ASSIGNED BACKGROUND")
@@ -175,59 +170,6 @@ def create_mosaic(images, annotations, idx=0):
     return cropped_mosaic, final_annotations
 
 
-class Resize:
-    """
-    Resizes an image to the desired dimensions
-    """
-
-    def __init__(self, size):
-        """
-        :param size: The dimensions to resize the image to.
-        """
-        assert isinstance(size, tuple) and len(size) == 2, "Size must be a tuple (height, width)"
-        self.size = size
-
-    def __call__(self, sample):
-        """
-
-        :param sample:
-            A dictionary in the form {"image": image, "annotations": annotations} containing the PIL image,
-            and the annotations. Annotations is a dictionary containing image_id, boxes, labels.
-        :return: A dictionary with resized image and annotation boxes.
-        """
-
-        image, annotations = sample["image"], sample["annotations"]
-        bboxes = annotations['boxes']
-
-        w,h = image.size  # Original image size
-        scale_x = self.size[1] / w
-        scale_y = self.size[0] / h
-
-        if h != w:
-            warnings.warn(f"Warning, image's height {h} and width {w} do not match. This function does not "
-                          f"preserve aspect ratio. This could lead to distortion.", UserWarning)
-
-        resize_image = transforms.Resize(self.size)
-        resized_image = resize_image(image)
-
-        if isinstance(bboxes, torch.Tensor):
-            if bboxes.dim() != 1: # Skip images that have no license detections (background)
-                # Update annotations to reflect the resized image
-                bboxes[:, [0, 2]] *= scale_x  # Scale x_min and x_max
-                bboxes[:, [1, 3]] *= scale_y  # Scale y_min and y_max
-
-            sample = {"image": resized_image, "annotations": annotations, }
-            return sample
-        else:
-            for bbox in bboxes:
-                if bbox != [0, 0, 1, 1]:
-                    bbox[0] *= scale_x
-                    bbox[2] *= scale_x
-                    bbox[1] *= scale_y
-                    bbox[3] *= scale_y
-            sample = {"image": resized_image, "annotations": annotations, }
-            return sample
-
 class ToTensor:
     """ Converts PIL image into tensor. """
 
@@ -240,7 +182,6 @@ class ToTensor:
         image, annotations = sample["image"], sample["annotations"]
         to_tensor = transforms.ToTensor()
         image_tensor = to_tensor(image)
-        #annotations_tensor = annotations_to_tensor(annotations)
 
         return image_tensor, annotations
 
@@ -466,6 +407,17 @@ testing_transform = A.Compose( # Not for test dataset, only for debugging purpos
     [
         A.Resize(300, 300),
         ToTensorV2()
+    ],
+    bbox_params=A.BboxParams(
+        format='pascal_voc',
+        label_fields=['labels'], # name (key) corresponding to the labels list
+        min_visibility=0.1
+    )
+)
+
+resize = A.Compose( # Not for test dataset, only for debugging purposes
+    [
+        A.Resize(300, 300)
     ],
     bbox_params=A.BboxParams(
         format='pascal_voc',

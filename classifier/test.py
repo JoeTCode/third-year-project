@@ -11,6 +11,7 @@ from PIL import ImageDraw, ImageFont, Image
 from torchvision import datasets, transforms, models
 from torchvision.transforms import ToPILImage
 import uuid
+from config import config
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 gpu = False
@@ -24,8 +25,6 @@ transform = transforms.Compose([
     transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
 ])
 
-validation_dataset = datasets.ImageFolder(root='val', transform=transform)
-
 model = models.mobilenet_v2()
 
 # Modify classification head
@@ -33,44 +32,32 @@ model.classifier[1] = nn.Linear(model.classifier[1].in_features, 2)
 model.load_state_dict(torch.load('save_weights/mobilenet_v2_weights_1.pth'))
 model.eval()
 
+eu_val_directory = '/Users/joe/Code/third-year-project/ANPR/classifier/val/EU'
 
-def unnormalise(img_tensor, mean, std):
-    # Convert mean and std to tensors for broadcasting
-    mean = torch.tensor(mean).view(-1, 1, 1)
-    std = torch.tensor(std).view(-1, 1, 1)
-
-    # Undo normalization: img = img * std + mean
-    img_tensor = img_tensor * std + mean
-
-    # Clamp to [0,1]
-    img_tensor = torch.clamp(img_tensor, 0, 1)
-
-    return img_tensor
-
-mean = [0.485, 0.456, 0.406]
-std = [0.229, 0.224, 0.225]
-
-def evaluate():
+def evaluate(dataset_root):
+    validation_dataset = datasets.ImageFolder(root=dataset_root, transform=transform)
     start = time.time()
     correct = 0
     with torch.no_grad():
         for image, label in validation_dataset:
             output = model(image.unsqueeze(0).to(device))
             _, predicted = torch.max(output, 1)
-            class_idx = predicted.item()
 
-            classes = ['EU', 'Non-EU']
-            print(f"Prediction: {classes[class_idx]}, Actual: {classes[label]}")
-            if class_idx != label:
-                unnormalised = unnormalise(image, mean, std)
-                img = ToPILImage()(unnormalised)
-                img_draw = ImageDraw.Draw(img)
+            if config.HPC:
+                class_idx = predicted.item()
 
-                font = ImageFont.truetype('/Users/joe/Code/third-year-project/ANPR/fonts/DejaVuSans.ttf', 20)
-                text = f"P: {classes[class_idx]}, A: {classes[label]}"
-                img_draw.text((10, 10), text, fill="white", font=font)
+                classes = ['EU', 'Non-EU']
+                print(f"Prediction: {classes[class_idx]}, Actual: {classes[label]}")
+                if class_idx != label:
+                    img = ToPILImage()(image)
+                    img_draw = ImageDraw.Draw(img)
 
-                img.show()
+                    font = ImageFont.truetype('/Users/joe/Code/third-year-project/ANPR/fonts/DejaVuSans.ttf', 20)
+                    text = f"P: {classes[class_idx]}, A: {classes[label]}"
+                    img_draw.text((10, 10), text, fill="white", font=font)
+
+                    img.show()
+
             if class_idx == label:
                 correct += 1
 
@@ -78,6 +65,9 @@ def evaluate():
     average_time_per_image = total / len(validation_dataset)
     print(f'Average classification time per image: {average_time_per_image*1000:.3f} ms')
     print(f'Accuracy: {correct*100/len(validation_dataset):.3f}%')
+
+
+evaluate(eu_val_directory)
 
 
 def calculate_correct(predicted_text, actual_text, np_img=None):

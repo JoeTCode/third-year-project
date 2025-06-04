@@ -11,56 +11,61 @@
 
 <div>
 
-    <h1>Upload an image or video!</h1>
-    <h2>Upload an Image</h2>
+    <h1 style="text-align: center">Welcome to the ANPR system</h1>
     <form action="/upload-image" method="POST" enctype="multipart/form-data">
-        <input type="file" name="image" accept="image/*" onchange="previewImage(event)" required>
-        <img id="image-preview" src="#" alt="Image Preview" style="display:none; max-width:300px;">
-
-        <fieldset>
-            <legend>Select Preprocessing Steps:</legend>
-            <label for="sharpen">Sharpen:</label>
-            <input type="checkbox" id="sharpen" name="preprocessing" value="sharpen" checked>
-            <br>
-            <label for="grayscale">Grayscale:</label>
-            <input type="checkbox" id="grayscale" name="preprocessing" value="grayscale">
-            <br>
-            <label for="threshold">Thresholding (for dark/bright images):</label>
-            <input type="checkbox" id="threshold" name="preprocessing" value="threshold">
-            <br>
-            <label for="histogram_equalisation">Histogram Equalisation (for dark/bright images):</label>
-            <input type="checkbox" id="histogram_equalisation" name="preprocessing" value="histogram_equalisation">
-            <br>
-            <label for="show_steps">Show steps:</label>
-            <input type="checkbox" id="show_steps" name="preprocessing" value="show_steps" checked>
-        </fieldset>
-
-        <button type="submit">Upload</button>
+        <div style="display: flex; justify-content: center; width: 300px; height: 200px; border: 2px dashed #ccc; justify-self: center">
+            <img id="image-preview" src="#" alt="Image Preview" style="display:none; max-width:300px;">
+        </div>
+        <div style="display: flex; justify-content: center;">
+            <label id="upload-button" style="border: 1px solid #ccc; padding: 6px 12px; cursor: pointer; border-radius: 4px">
+                <input type="file" name="image" accept="image/*" onchange="previewImage(event)" style="display: none;" required>
+                Select an image
+            </label>
+            <button type="submit" id="submit-button" style="cursor: pointer; background: darkseagreen; border-color: mediumseagreen; border-radius: 4px;">Upload</button>
+        </div>
+        <div style="display: flex; justify-content: center; align-items: center; text-align: center">
+            <fieldset style="display: flex">
+                <legend>Select Preprocessing Steps:</legend>
+                <label for="sharpen">Sharpen:</label>
+                <input type="checkbox" id="sharpen" name="preprocessing" value="sharpen" checked>
+                <br>
+                <label for="grayscale">Grayscale:</label>
+                <input type="checkbox" id="grayscale" name="preprocessing" value="grayscale">
+                <br>
+                <label for="threshold">Thresholding:</label>
+                <input type="checkbox" id="threshold" name="preprocessing" value="threshold">
+                <br>
+                <label for="histogram_equalisation">Histogram Equalisation:</label>
+                <input type="checkbox" id="histogram_equalisation" name="preprocessing" value="histogram_equalisation">
+                <br>
+                <label for="show_steps">Show steps:</label>
+                <input type="checkbox" id="show_steps" name="preprocessing" value="show_steps" checked>
+            </fieldset>
+        </div>
     </form>
 
-    <h2>Upload a video</h2>
-    <form action="/upload-video" method="POST" enctype="multipart/form-data">
-        <input type="file" name="video" accept="video/*" onchange="previewVideo(event)" required>
-        <video controls id="video-preview" style="display:none; max-width:300px;">
-            <source id="video-src" src="#" type="#">
-        </video>
-    </form>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; text-align: center;">
+        {% if input_filename %}
+            <div>
+                <h3>Input Image</h3>
+                <img src="{{ url_for('static', filename='input_images/' + input_filename) }}" alt="Input Image" style="max-width:300px;">
+            </div>
+        {% endif %}
 
-    {% if input_filename %}
-        <h3>Input Image</h3>
-        <img src="{{ url_for('static', filename='input_images/' + input_filename) }}" alt="Input Image" style="max-width:300px;">
-    {% endif %}
+        {% if output_filename %}
+            <div>
+                <h3>Processed Image</h3>
+                <img src="{{ url_for('static', filename='output_images/' + output_filename) }}" alt="Output Image" style="max-width:300px;">
+            </div>
+        {% endif %}
 
-    {% if output_filename %}
-        <h3>Processed Image</h3>
-        <img src="{{ url_for('static', filename='output_images/' + output_filename) }}" alt="Output Image" style="max-width:300px;">
-    {% endif %}
-
-    {% if steps_filename %}
-        <h3>Preprocessing Steps</h3>
-        <img src="{{ url_for('static', filename='output_images_steps/' + steps_filename) }}" alt="Preprocessing steps images" style="max-width:300px;">
-    {% endif %}
-
+        {% if steps_filename %}
+            <div>
+                <h3>Pre-processing Steps</h3>
+                <img src="{{ url_for('static', filename='output_images_steps/' + steps_filename) }}" alt="Preprocessing steps images" style="max-width:300px;">
+            </div>
+        {% endif %}
+    </div>
 </div>
 
 </body>

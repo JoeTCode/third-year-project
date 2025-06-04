@@ -1,6 +1,6 @@
-path: /gpfs/home/hyg22ktu/train-yolo
+path: /Users/joe/Desktop/eu-dataset
 train: train/images
-val: validation/images
+val: test/images
 
 nc: 1
 names:

@@ -7,13 +7,8 @@ import os
 from PIL import Image, ImageFilter, ImageDraw, ImageFont
 import numpy as np
 import cv2
-# import easyocr
 from paddleocr import PaddleOCR
 import uuid
-
-# Initialise EasyOCR reader
-#reader = easyocr.Reader(['en'], gpu=config.HPC)
-
 
 def reformat_bbox(bbox, image_height, image_width):
     """
@@ -78,22 +73,8 @@ def draw_bbox(image, draw, predicted_bbox, prediction_score, ocr, plate_type=Fal
 
     steps, np_img = localise_and_preprocess_license_plate(image, predicted_bbox, **preprocess_kwargs)
 
-    #detections = reader.readtext(np_img)
-    #print(detections)
-
-    # license_plate_text = ''
-    # for detection in detections:
-    #     license_plate_text += detection[1]
-    # if len(license_plate_text) == 0:
-    #     license_plate_text = 'NaN'
-
-    # formatted_np_img = np.array(np_img)[:, :, ::-1]  # Convert RGB to BGR
-
-    # Read number plate text
-    # detections = ocr.ocr(np_img, cls=True)
-
     bgr = cv2.cvtColor(np_img, cv2.COLOR_RGB2BGR)
-    images_dir = '/Users/joe/Code/third-year-project/ANPR/backend/ocr-image'
+    images_dir = config.YOLO_SAVE_OCR_IMAGE_DIR
     image_filename = save_image('.png', bgr, images_dir=images_dir)
     image_path = os.path.join(images_dir, image_filename)
     detections = ocr.ocr(image_path, cls=True)
@@ -119,7 +100,7 @@ def draw_bbox(image, draw, predicted_bbox, prediction_score, ocr, plate_type=Fal
         text += ' | ' + plate_type
 
     # if not config.HPC:
-    font_path = "/Users/joe/Code/third-year-project/ANPR/fonts/DejaVuSans.ttf"
+    font_path = config.FONT_PATH
     # else:
     #     font_path = "/gpfs/home/hyg22ktu/fonts/DejaVuSans.ttf"
 
@@ -149,11 +130,6 @@ def draw_bbox(image, draw, predicted_bbox, prediction_score, ocr, plate_type=Fal
 
     return steps # can be None if show_steps is False
 
-def rotate_image(image, angle):
-  image_center = tuple(np.array(image.shape[1::-1]) / 2)
-  rot_mat = cv2.getRotationMatrix2D(image_center, angle, 1.0)
-  result = cv2.warpAffine(image, rot_mat, image.shape[1::-1], flags=cv2.INTER_LINEAR)
-  return result
 
 def localise_and_preprocess_license_plate(image, predicted_bbox, *, sharpen=True, grayscale=False, threshold=False, histogram_equalisation=False, show_steps=False):
     """
@@ -204,7 +180,7 @@ def localise_and_preprocess_license_plate(image, predicted_bbox, *, sharpen=True
 
 if __name__ == '__main__':
     # Load model using fine-tuned weights from HPC
-    model = YOLO("/Users/joe/Code/third-year-project/ANPR/yolov8n/weights/run9_best.pt")  # pretrained
+    model = YOLO(config.YOLO_WEIGHT)  # pretrained
     ocr = PaddleOCR(use_angle_cls=True, lang='en')  # need to run only once to download and load model into memory
 
     for i, image in enumerate(os.listdir(config.VALID_IMAGES_ROOT)):
@@ -240,16 +216,6 @@ if __name__ == '__main__':
 
                 np_img = localise_and_preprocess_license_plate(image, bbox)
 
-                # detections = reader.readtext(np_img)
-
-                # print(detections)
-                #
-                # license_plate_text = ''
-                # for detection in detections:
-                #     license_plate_text += detection[1]
-                # if len(license_plate_text) == 0:
-                #     license_plate_text = 'NaN'
-
                 detections = ocr.ocr(np_img, cls=True)
 
                 license_plate_text = ''
@@ -266,7 +232,7 @@ if __name__ == '__main__':
                 text += license_plate_text
                 # Gets dimensions of text so a rectangle can be mapped under it (anchor set to FONT_SIZE pixels above predicted bbox)
                 if not config.HPC:
-                    font_path = "/Users/joe/Code/third-year-project/ANPR/fonts/DejaVuSans.ttf"
+                    font_path = config.FONT_PATH
                 else:
                     font_path = "/gpfs/home/hyg22ktu/fonts/DejaVuSans.ttf"
                 font = ImageFont.truetype(font_path, size=config.FONT_SIZE)
