@@ -95,7 +95,7 @@ for epoch in range(num_epochs):
         val_accuracy = val_correct / val_total
 
         print(
-            f"Epoch {epoch + 1}/{num_epochs} | Loss: {train_loss:.4f} | Train Acc: {train_accuracy:.4f} | Val Acc: {val_accuracy:.4f}"
+            f"Epoch {epoch + 1}/{num_epochs}, Loss: {train_loss:.2f}, Train Acc: {train_accuracy:.2f},  Val Acc: {val_accuracy:.2f}"
         )
 
     if val_accuracy > best_val_accuracy * difference_multiplier:

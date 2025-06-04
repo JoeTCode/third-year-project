@@ -1,6 +1,5 @@
 import os
 import torch
-import warnings
 from PIL import Image, ImageDraw
 from torch.utils.data import Dataset
 from torchvision import transforms
@@ -168,22 +167,6 @@ def create_mosaic(images, annotations, idx=0):
     #cropped_mosaic.show()
 
     return cropped_mosaic, final_annotations
-
-
-class ToTensor:
-    """ Converts PIL image into tensor. """
-
-    def __call__(self, sample):
-        """
-        :param sample: A dictionary containing image, and annotations.
-        :return: (Tuple), The image in tensor form and the annotations.
-        """
-
-        image, annotations = sample["image"], sample["annotations"]
-        to_tensor = transforms.ToTensor()
-        image_tensor = to_tensor(image)
-
-        return image_tensor, annotations
 
 
 def reformat_bbox(bbox, image_height, image_width):
@@ -431,14 +414,3 @@ anpr_yolo_dataset = AnprYoloDataset(
         images_root=config.TRAIN_IMAGES_ROOT,
         transform=train_transform
     )
-
-def collate_fn(batch):
-    images = []
-    targets = []
-
-    for sample in batch:
-        images.append(sample[0])  # Image tensor
-        targets.append(sample[1])  # List of annotations (dictionary)
-
-    images = torch.stack(images, dim=0)  # Stack images into a batch
-    return images, targets  # Targets remain as a list of dicts (not a tensor)

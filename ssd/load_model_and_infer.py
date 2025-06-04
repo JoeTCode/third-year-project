@@ -1,17 +1,15 @@
 import time
 import torch
 import torchvision
-from custom_yolo_dataset_loader import AnprYoloDataset, ToTensor, validation_transform
+from custom_yolo_dataset_loader import AnprYoloDataset, validation_transform
 from torch.utils.data import DataLoader
 from torchvision.models.detection.ssd import SSD300_VGG16_Weights
 from torchvision.models.detection.ssd import SSDClassificationHead
 from torchvision.models.detection import _utils
 from config import config
 from torchmetrics.detection import MeanAveragePrecision
-from show_predictions import map_bbox_to_image
 from tqdm import tqdm
 
-# perform inference on the GPU, or on the CPU if a GPU is not available
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 weights_path = 'ssd_checkpoints/checkpoint_epoch_25.pth'

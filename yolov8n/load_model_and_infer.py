@@ -20,7 +20,7 @@ def reformat_bbox(bbox, image_height, image_width):
     """
     x_center, y_center, width, height = float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])
 
-    # Convert YOLO normalized values to absolute values
+    # Convert YOLO values
     x_center = x_center * image_width
     y_center = y_center * image_height
     width = width * image_width

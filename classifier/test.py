@@ -64,7 +64,7 @@ def evaluate(dataset_root):
     total = time.time() - start
     average_time_per_image = total / len(validation_dataset)
     print(f'Average classification time per image: {average_time_per_image*1000:.3f} ms')
-    print(f'Accuracy: {correct*100/len(validation_dataset):.3f}%')
+    print(f'Accuracy: {correct*100/len(validation_dataset):.2f}%')
 
 
 evaluate(eu_val_directory)

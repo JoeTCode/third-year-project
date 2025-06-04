@@ -9,7 +9,6 @@ import cv2
 import torch
 from config import config
 
-# Initialise EasyOCR reader settings
 gpu = False
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 if device.type == 'cuda':
@@ -28,10 +27,9 @@ def crop_numberplate(pil_image, bbox):
 
 
 def resize_image_maintain_aspect_ratio(image, new_width=None, new_height=None, HPC=False):
-    # Get original image dimensions
+
     original_width, original_height = image.size
 
-    # Calculate aspect ratio
     aspect_ratio = original_width / original_height
 
     if new_width is not None:
@@ -40,7 +38,6 @@ def resize_image_maintain_aspect_ratio(image, new_width=None, new_height=None, H
     if new_height is not None:
         new_width = int(new_height * aspect_ratio)
 
-    # Resize the image while maintaining the aspect ratio
     if not HPC:
         resized_image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
     else: resized_image = image.resize((new_width, new_height), Image.ANTIALIAS)
@@ -77,7 +74,6 @@ def preprocess_image(image, bbox=None, crop_size=None):
     :param bbox: (Optional) A bbox.
     :return: A processed image converted to a numpy array.
     """
-
 
     resized_image = image
 

@@ -38,7 +38,6 @@ def create_checkpoints_sub_directory(save_directory_path):
 
 CHECKPOINTS_SUB_DIRECTORY = create_checkpoints_sub_directory(SAVE_CHECKPOINTS_DIRECTORY)
 
-# train on the GPU, or on the CPU if a GPU is not available
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 train_dataset = AnprYoloDataset(
@@ -66,7 +65,7 @@ def collate_fn(batch):
     images = torch.stack(images, dim=0)  # Stack images into a batch
     return images, targets  # Targets remain as a list of dicts (not a tensor)
 
-# Use dataloader function load the dataset in the specified transformation.
+# Use dataloader function load the dataset in the specified transformation
 if config.HPC:
     train_dataloader = DataLoader(
         train_dataset, batch_size=32, shuffle=True, num_workers=1, pin_memory=True, collate_fn=collate_fn
@@ -82,18 +81,18 @@ else:
         valid_dataset, batch_size=config.BATCH_SIZE, shuffle=False, num_workers=0, collate_fn=collate_fn
     )
 
-# Load the model with pretrained weights
+# Load model with pretrained weights
 model = torchvision.models.detection.ssd300_vgg16(weights=SSD300_VGG16_Weights.DEFAULT)
 
 # 2 classes: license plate = 1, background = 0
 num_classes = 2
 
-# Retrieve the list of input channels.
+# Retrieve the list of input channels
 in_channels = _utils.retrieve_out_channels(model.backbone, (300, 300))
 
 num_anchors = model.anchor_generator.num_anchors_per_location()
 
-# The classification head.
+# modify classification head
 model.head.classification_head = SSDClassificationHead(
     in_channels=in_channels,
     num_anchors=num_anchors,
@@ -106,12 +105,6 @@ lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1
 best_map = 0
 patience_counter = 0
 model = model.to(device)
-
-total_steps = len(train_dataloader)  # Finds the number of batches
-log_interval = total_steps // config.NUM_LOGS  # Find the intervals at which to print the log
-
-if log_interval == 0:  # Prevents modulo error if total_steps < NUM_LOGS meaning log_interval will equal zero
-    log_interval = 1
 
 for epoch in range(config.EPOCHS):
     total_targets = 0
@@ -151,7 +144,7 @@ for epoch in range(config.EPOCHS):
         total_epoch_loss += total_loss.item()
         time_for_log_interval += (time.time() - start_time)
 
-        if i_batch % log_interval == 0 and config.VERBOSE:
+        if i_batch % 5 == 0 and config.VERBOSE:
             bbox_regression = round(float(list(loss_dict.values())[0]), 4)
             classification = round(float(list(loss_dict.values())[1]), 4)
 
@@ -166,10 +159,7 @@ for epoch in range(config.EPOCHS):
     print(f'Average training loss for epoch {epoch + 1}: {average_epoch_loss:<4}'
           f'  time: {round(time_for_epoch, 2)} s')
 
-    # Step scheduler after epoch
     lr_scheduler.step()
-
-
     evaluation_start_time = time.time()
 
     with torch.no_grad():
@@ -182,7 +172,7 @@ for epoch in range(config.EPOCHS):
 
             images = images.to(device)
 
-            # Remove image_id from annotations, and move bboxes and labels to device
+            # Remove image_id from annotations
             targets = [
                 {key: value.to(device) for key, value in annotation.items() if key != 'image_id'} for annotation
                 in annotations

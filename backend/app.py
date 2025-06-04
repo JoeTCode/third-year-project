@@ -3,9 +3,8 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from config import config
 from io import BytesIO
-from flask import Flask, request, redirect, url_for
+from flask import Flask, request
 from flask import render_template
-from werkzeug.utils import secure_filename
 from yolov8n.load_model_and_infer import draw_bbox
 from PIL import Image, ImageDraw
 from ultralytics import YOLO
@@ -39,7 +38,7 @@ def upload_image():
     if file.filename == '':
         return 'No selected file', 400
 
-    filename = secure_filename(file.filename)
+    filename = file.filename
     _, extension = os.path.splitext(filename)
 
     preprocessing = request.form.getlist('preprocessing')
